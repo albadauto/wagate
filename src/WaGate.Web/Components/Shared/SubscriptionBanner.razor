@@ -1,0 +1,63 @@
+@implements IDisposable
+@inject SubscriptionState Subscription
+@inject NavigationManager Nav
+
+@if (_sub is { BillingEnabled: true } s && !Hidden)
+{
+    if (!s.IsUsable)
+    {
+        <div class="mb-6 flex flex-col gap-3 rounded-xl border border-brand-200 bg-brand-50 px-5 py-4 text-sm text-brand-950 sm:flex-row sm:items-center">
+            <Icon Name="zap" Class="h-5 w-5 shrink-0 text-brand-600" />
+            <span class="flex-1">@(s.TrialAvailable ? "Escolha um plano para criar suas instâncias — o Ultimate tem 7 dias grátis." : "Sua conta está sem plano ativo. Assine para voltar a enviar mensagens.")</span>
+            <a href="plans" class="btn-primary btn-sm">Ver planos</a>
+        </div>
+    }
+    else if (s.Status == "past_due")
+    {
+        <div class="mb-6 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800">
+            <Icon Name="alert" Class="h-5 w-5 shrink-0" />
+            <span class="flex-1"><b>Pagamento pendente.</b> Atualize seu cartão para não interromper as instâncias.</span>
+            <a href="billing" class="btn-danger btn-sm">Resolver</a>
+        </div>
+    }
+    else if (s.Status == "trialing" && s.TrialEndsAt is not null)
+    {
+        var days = Math.Max(0, (int)Math.Ceiling((s.TrialEndsAt.Value - DateTime.UtcNow).TotalDays));
+        if (days <= 3)
+        {
+            <div class="mb-6 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900">
+                <span class="flex-1">Seu teste grátis termina em <b>@days dia(s)</b>. A cobrança começa automaticamente no cartão cadastrado.</span>
+                <a href="billing" class="font-semibold underline">Detalhes</a>
+            </div>
+        }
+    }
+}
+
+@code {
+    private SubscriptionDto? _sub;
+
+    private bool Hidden
+    {
+        get
+        {
+            var p = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0];
+            return p.StartsWith("plans") || p.StartsWith("billing");
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Subscription.Changed += OnChanged;
+        Nav.LocationChanged += OnLocation;
+        _sub = await Subscription.LoadAsync();
+    }
+
+    private void OnChanged() { _sub = Subscription.Current; _ = InvokeAsync(StateHasChanged); }
+    private void OnLocation(object? s, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Subscription.Changed -= OnChanged;
+        Nav.LocationChanged -= OnLocation;
+    }
+}

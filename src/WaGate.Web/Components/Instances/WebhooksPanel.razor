@@ -1,0 +1,241 @@
+@inject ApiClient Api
+@inject ToastService Toasts
+
+<div class="mb-4 flex items-center justify-between">
+    <p class="text-sm text-navy-500">Endpoints extras, com escolha livre de eventos. Todos recebem as entregas assinadas com HMAC-SHA256.</p>
+    <button class="btn-primary shrink-0" @onclick="New"><Icon Name="plus" /> Novo webhook</button>
+</div>
+
+@if (_items is null)
+{
+    <div class="flex justify-center py-16"><Spinner /></div>
+}
+else if (_items.Count == 0)
+{
+    <EmptyState IconName="webhook" Title="Nenhum webhook adicional" Text="Os webhooks principais ficam em “Webhooks e configurações gerais”. Use esta área para mandar os mesmos eventos a outros sistemas ou combinar vários eventos numa URL.">
+        <button class="btn-primary" @onclick="New"><Icon Name="plus" /> Novo webhook</button>
+    </EmptyState>
+}
+else
+{
+    <div class="space-y-4">
+        @foreach (var w in _items)
+        {
+            <div class="card p-5">
+                <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2">
+                            <span class="h-2 w-2 rounded-full @(w.IsActive ? "bg-brand-500" : "bg-navy-300")"></span>
+                            <span class="truncate font-mono text-sm">@w.Url</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(w.Description)) { <p class="mt-1 text-sm text-navy-500">@w.Description</p> }
+                        <div class="mt-3 flex flex-wrap gap-1.5">
+                            @foreach (var e in w.Events)
+                            {
+                                <span class="rounded-md bg-navy-100 px-2 py-0.5 font-mono text-[11px] text-navy-600">@(e == "*" ? "todos os eventos" : e)</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="flex shrink-0 flex-wrap gap-2">
+                        <button class="btn-secondary btn-sm" disabled="@(_testing == w.Id)" @onclick="() => Test(w)">
+                            @if (_testing == w.Id) { <Spinner Class="h-3.5 w-3.5" /> } else { <Icon Name="zap" Class="h-3.5 w-3.5" /> } Testar
+                        </button>
+                        <a class="btn-secondary btn-sm" href="deliveries?webhook=@w.Id&instance=@InstanceId">Entregas</a>
+                        <button class="btn-secondary btn-sm" @onclick="() => Edit(w)">Editar</button>
+                        <button class="btn-danger-ghost btn-sm" @onclick="() => _deleting = w"><Icon Name="trash" Class="h-3.5 w-3.5" /></button>
+                    </div>
+                </div>
+                <div class="mt-4 flex flex-col gap-2 border-t border-navy-100 pt-4 sm:flex-row sm:items-end">
+                    <CopyField Label="Segredo de assinatura" Value="@w.Secret" Masked="true" Class="flex-1" />
+                    <button class="btn-secondary btn-sm" @onclick="() => Rotate(w)"><Icon Name="refresh" Class="h-3.5 w-3.5" /> Gerar novo</button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<div class="card mt-6 p-5 text-sm">
+    <h3 class="font-semibold">Como validar a assinatura</h3>
+    <p class="mt-1 text-navy-500">Cada requisição traz <code class="code">X-WaGate-Timestamp</code> e <code class="code">X-WaGate-Signature: sha256=&lt;hex&gt;</code>. Calcule <code class="code">HMAC-SHA256(segredo, timestamp + "." + corpo)</code> e compare. Responda 2xx em até 15s; falhas são repetidas em 10s, 30s, 2min, 10min, 30min, 1h, 3h e 6h.</p>
+    <pre class="mt-3 overflow-x-auto rounded-lg bg-navy-900 p-4 font-mono text-[12px] leading-relaxed text-navy-200">@Verify</pre>
+</div>
+
+<Modal @bind-Open="_editOpen" Title="@(_editingId is null ? "Novo webhook" : "Editar webhook")" Width="max-w-xl">
+    <ChildContent>
+        <EditForm id="webhook-form" Model="_form" OnValidSubmit="Save" FormName="webhook-form" class="space-y-4">
+            <DataAnnotationsValidator />
+            <div>
+                <label class="label">URL</label>
+                <InputText @bind-Value="_form.Url" class="input font-mono text-sm" placeholder="https://seu-sistema.com/webhooks/whatsapp" />
+                <ValidationMessage For="() => _form.Url" class="field-error" />
+            </div>
+            <div>
+                <label class="label">Descrição (opcional)</label>
+                <InputText @bind-Value="_form.Description" class="input" />
+            </div>
+            <div>
+                <div class="mb-2 flex items-center justify-between">
+                    <label class="label !mb-0">Eventos</label>
+                    <label class="flex items-center gap-2 text-sm"><input type="checkbox" class="checkbox" checked="@_all" @onchange="e => _all = (bool)e.Value!" /> Todos</label>
+                </div>
+                @if (!_all)
+                {
+                    <div class="grid gap-2 sm:grid-cols-2">
+                        @foreach (var e in _events)
+                        {
+                            <label class="flex items-center gap-2 rounded-lg border border-navy-200 px-3 py-2 text-sm hover:bg-navy-50">
+                                <input type="checkbox" class="checkbox" checked="@_selected.Contains(e)" @onchange="ev => Toggle(e, (bool)ev.Value!)" />
+                                <span class="font-mono text-[12px]">@e</span>
+                            </label>
+                        }
+                    </div>
+                }
+            </div>
+            <label class="flex items-center gap-2 text-sm"><InputCheckbox @bind-Value="_form.IsActive" class="checkbox" /> Ativo</label>
+        </EditForm>
+    </ChildContent>
+    <Footer>
+        <button class="btn-secondary" @onclick="() => _editOpen = false">Cancelar</button>
+        <button class="btn-primary" type="submit" form="webhook-form" disabled="@_busy">Salvar</button>
+    </Footer>
+</Modal>
+
+<Modal Open="_testResult is not null" OpenChanged="_ => _testResult = null" Title="Resultado do teste" Width="max-w-2xl">
+    <ChildContent>
+        @if (_testResult is not null)
+        {
+            var d = _testResult.Delivery;
+            <div class="flex flex-wrap items-center gap-3 text-sm">
+                <StatusBadge Status="@(d.Status == "Succeeded" ? "SUCCEEDED" : "FAILED")" />
+                <span>HTTP <b>@(d.LastStatusCode?.ToString() ?? "—")</b></span>
+                <span class="text-navy-500">@d.LastDurationMs ms</span>
+                @if (d.LastError is not null) { <span class="text-red-600">@d.LastError</span> }
+            </div>
+            <div class="mt-4 text-xs font-medium text-navy-500">Payload enviado</div>
+            <pre class="mt-1 max-h-60 overflow-auto rounded-lg bg-navy-900 p-3 font-mono text-[12px] text-navy-200">@Pretty(_testResult.Payload)</pre>
+            <div class="mt-4 text-xs font-medium text-navy-500">Resposta</div>
+            <pre class="mt-1 max-h-40 overflow-auto rounded-lg bg-navy-50 p-3 font-mono text-[12px] text-navy-700 ring-1 ring-navy-200">@(string.IsNullOrEmpty(_testResult.LastResponse) ? "(vazia)" : _testResult.LastResponse)</pre>
+        }
+    </ChildContent>
+</Modal>
+
+<Modal Open="_deleting is not null" OpenChanged="_ => _deleting = null" Title="Remover webhook?">
+    <ChildContent><p class="text-sm text-navy-600">As entregas pendentes para <span class="font-mono">@_deleting?.Url</span> serão descartadas.</p></ChildContent>
+    <Footer>
+        <button class="btn-secondary" @onclick="() => _deleting = null">Cancelar</button>
+        <button class="btn-danger" @onclick="Delete">Remover</button>
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter, EditorRequired] public Guid InstanceId { get; set; }
+
+    private List<WebhookDto>? _items;
+    private List<string> _events = [];
+    private bool _editOpen, _busy, _all = true;
+    private Guid? _editingId, _testing;
+    private WebhookRequest _form = new();
+    private HashSet<string> _selected = [];
+    private DeliveryDetailDto? _testResult;
+    private WebhookDto? _deleting;
+
+    private const string Verify = """
+        // ASP.NET Core
+        app.MapPost("/webhooks/whatsapp", async (HttpRequest req) =>
+        {
+            var body = await new StreamReader(req.Body).ReadToEndAsync();
+            var ts   = req.Headers["X-WaGate-Timestamp"].ToString();
+            var sig  = req.Headers["X-WaGate-Signature"].ToString().Replace("sha256=", "");
+
+            var key  = Encoding.UTF8.GetBytes(secret);
+            var hash = Convert.ToHexStringLower(HMACSHA256.HashData(key, Encoding.UTF8.GetBytes($"{ts}.{body}")));
+            if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(hash), Encoding.UTF8.GetBytes(sig)))
+                return Results.Unauthorized();
+
+            var evt = JsonDocument.Parse(body).RootElement.GetProperty("event").GetString();
+            // message.received, message.status, instance.status ...
+            return Results.Ok();
+        });
+        """;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+        try { _events = await Api.EventsAsync(); } catch (ApiException) { }
+    }
+
+    private async Task Load()
+    {
+        // os webhooks "slot:*" são editados no card "Webhooks e configurações gerais"
+        try { _items = (await Api.WebhooksAsync(InstanceId)).Where(w => w.Description?.StartsWith("slot:") != true).ToList(); }
+        catch (ApiException ex) { Toasts.Error(ex.Message); _items ??= []; }
+    }
+
+    private void New()
+    {
+        _editingId = null;
+        _form = new WebhookRequest();
+        _all = true;
+        _selected = [];
+        _editOpen = true;
+    }
+
+    private void Edit(WebhookDto w)
+    {
+        _editingId = w.Id;
+        _form = new WebhookRequest { Url = w.Url, Description = w.Description, IsActive = w.IsActive, Events = w.Events.ToList() };
+        _all = w.Events.Contains("*");
+        _selected = _all ? [] : w.Events.ToHashSet();
+        _editOpen = true;
+    }
+
+    private void Toggle(string e, bool on)
+    {
+        if (on) _selected.Add(e); else _selected.Remove(e);
+    }
+
+    private async Task Save()
+    {
+        _form.Events = _all ? ["*"] : _selected.ToList();
+        if (!_all && _form.Events.Count == 0) { Toasts.Error("Selecione ao menos um evento."); return; }
+        _busy = true;
+        try
+        {
+            if (_editingId is null) await Api.CreateWebhookAsync(InstanceId, _form);
+            else await Api.UpdateWebhookAsync(_editingId.Value, _form);
+            _editOpen = false;
+            Toasts.Success("Webhook salvo.");
+            await Load();
+        }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+        finally { _busy = false; }
+    }
+
+    private async Task Test(WebhookDto w)
+    {
+        _testing = w.Id;
+        try { _testResult = await Api.TestWebhookAsync(w.Id); }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+        finally { _testing = null; }
+    }
+
+    private async Task Rotate(WebhookDto w)
+    {
+        try { await Api.RotateWebhookSecretAsync(w.Id); Toasts.Success("Novo segredo gerado. Atualize seu sistema."); await Load(); }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+    }
+
+    private async Task Delete()
+    {
+        if (_deleting is null) return;
+        try { await Api.DeleteWebhookAsync(_deleting.Id); Toasts.Success("Webhook removido."); await Load(); }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+        finally { _deleting = null; }
+    }
+
+    public static string Pretty(string json)
+    {
+        try { return System.Text.Json.JsonSerializer.Serialize(System.Text.Json.JsonDocument.Parse(json).RootElement, new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }); }
+        catch { return json; }
+    }
+}

@@ -1,0 +1,8 @@
+<li class="flex items-center gap-1.5 @(Ok ? "text-brand-700" : "text-navy-400")">
+    <Icon Name="@(Ok ? "check" : "x")" Class="h-3 w-3" /> @Text
+</li>
+
+@code {
+    [Parameter] public bool Ok { get; set; }
+    [Parameter] public string Text { get; set; } = "";
+}

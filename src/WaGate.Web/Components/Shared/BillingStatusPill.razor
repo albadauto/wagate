@@ -1,0 +1,18 @@
+<span class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold @Info.Style">
+    <span class="h-2 w-2 rounded-full @Info.Dot"></span>@Info.Label
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Status { get; set; } = "";
+
+    private (string Style, string Dot, string Label) Info => Status switch
+    {
+        "trialing" => ("bg-brand-50 text-brand-800", "bg-brand-500", "Teste grátis"),
+        "active" => ("bg-brand-50 text-brand-800", "bg-brand-500", "Ativa"),
+        "past_due" => ("bg-red-50 text-red-700", "bg-red-500 animate-pulse", "Pagamento pendente"),
+        "canceled" => ("bg-navy-100 text-navy-600", "bg-navy-400", "Cancelada"),
+        "unpaid" => ("bg-red-50 text-red-700", "bg-red-500", "Não paga"),
+        "incomplete" or "incomplete_expired" => ("bg-amber-50 text-amber-800", "bg-amber-500", "Incompleta"),
+        _ => ("bg-navy-100 text-navy-600", "bg-navy-400", "Sem plano")
+    };
+}

@@ -1,0 +1,266 @@
+@page "/instances/{Id:guid}"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject ToastService Toasts
+@inject NavigationManager Nav
+@inject IConfiguration Config
+
+<PageTitle>@(_instance?.Name ?? "Instância") · WaGate</PageTitle>
+
+@if (_instance is null)
+{
+    <div class="flex justify-center py-20"><Spinner /></div>
+}
+else
+{
+    var connected = _instance.Status == "WORKING";
+
+    <nav class="mb-4 flex items-center gap-2 text-sm text-navy-500">
+        <a href="" class="hover:text-navy-800">Instâncias</a>
+        <span>/</span>
+        <span class="font-medium text-navy-800">@_instance.Name</span>
+    </nav>
+
+    <div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div class="flex items-center gap-4">
+            <h1 class="text-2xl font-bold tracking-tight text-navy-950 outline-none" tabindex="-1">@_instance.Name</h1>
+            <ConnectionPill Status="@_instance.Status" />
+        </div>
+        <div class="flex flex-wrap gap-2">
+            @if (!connected)
+            {
+                <button class="btn-primary" @onclick="() => _qrOpen = true"><Icon Name="qr" /> Ler QR Code</button>
+            }
+            <button class="btn-secondary" disabled="@_busy" @onclick='() => Act("restart", "Instância reiniciada")'><Icon Name="refresh" /> Reiniciar</button>
+            @if (connected)
+            {
+                <button class="btn-danger-ghost" disabled="@_busy" @onclick="() => _confirmLogout = true"><Icon Name="logout" /> Desconectar</button>
+            }
+            <div class="relative">
+                <button class="btn-secondary px-2.5" title="Mais opções" @onclick="() => _menu = !_menu">
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="12" cy="19" r="1.8" /></svg>
+                </button>
+                @if (_menu)
+                {
+                    <div class="fixed inset-0 z-10" @onclick="() => _menu = false"></div>
+                    <div class="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-xl bg-white py-1 text-sm shadow-lg ring-1 ring-navy-200">
+                        <button class="menu-item" @onclick="OpenRename"><Icon Name="settings" /> Renomear instância</button>
+                        <button class="menu-item" @onclick='() => Act("sync", "Status atualizado")'><Icon Name="refresh" /> Atualizar status</button>
+                        <button class="menu-item" @onclick='() => Act("stop", "Sessão parada")'><Icon Name="stop" /> Parar sessão</button>
+                        <div class="my-1 border-t border-navy-100"></div>
+                        <button class="menu-item !text-red-600 hover:!bg-red-50" @onclick="() => { _menu = false; _confirmDelete = true; }"><Icon Name="trash" /> Excluir instância</button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-3">
+        @* Status do celular *@
+        <div class="card p-6">
+            <div class="text-sm font-semibold text-navy-500">Celular</div>
+            @if (connected)
+            {
+                <div class="mt-4 flex items-center gap-4">
+                    <div class="grid h-14 w-14 place-items-center rounded-full bg-brand-100 text-brand-700"><Icon Name="phone" Class="h-6 w-6" /></div>
+                    <div class="min-w-0">
+                        <div class="truncate text-lg font-bold text-navy-950">@(_instance.PushName ?? "WhatsApp")</div>
+                        <div class="text-sm text-navy-600">@(_instance.PhoneNumber is null ? "" : Instances.FormatPhone(_instance.PhoneNumber))</div>
+                    </div>
+                </div>
+                <div class="mt-5 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800">
+                    Conectado @(_instance.ConnectedAt is null ? "" : "desde " + _instance.ConnectedAt.Value.ToLocalTime().ToString("dd/MM/yyyy 'às' HH:mm"))
+                </div>
+            }
+            else
+            {
+                <div class="mt-4 flex items-center gap-4">
+                    <div class="grid h-14 w-14 place-items-center rounded-full bg-navy-100 text-navy-400"><Icon Name="phone" Class="h-6 w-6" /></div>
+                    <div>
+                        <div class="text-lg font-bold text-navy-950">Nenhum número conectado</div>
+                        <div class="text-sm text-navy-500">Leia o QR Code para ativar a instância.</div>
+                    </div>
+                </div>
+                <button class="btn-primary mt-5 w-full" @onclick="() => _qrOpen = true"><Icon Name="qr" /> Ler QR Code</button>
+            }
+        </div>
+
+        @* Dados da instância *@
+        <div class="card p-6 lg:col-span-2">
+            <div class="flex items-center justify-between">
+                <h2 class="font-bold text-navy-950">Dados da instância</h2>
+                <a href="@($"{PublicUrl}/docs")" target="_blank" class="text-sm font-semibold text-brand-700 hover:underline">Ver documentação →</a>
+            </div>
+            <div class="mt-5 grid gap-4">
+                <div class="grid gap-4 md:grid-cols-2">
+                    <CopyField Label="ID da instância" Value="@_instance.Id.ToString()" />
+                    <div>
+                        <div class="mb-1 flex items-center justify-between">
+                            <span class="text-xs font-medium text-navy-500">Token da instância</span>
+                            <button class="text-xs font-semibold text-brand-700 hover:underline" @onclick="() => _confirmRotate = true">Gerar novo</button>
+                        </div>
+                        <CopyField Value="@_instance.Token" Masked="true" />
+                    </div>
+                </div>
+                <CopyField Label="API da instância" Value="@ApiUrl" />
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-6">
+        <WaGate.Web.Components.Instances.WebhookSlots Instance="_instance" InstanceChanged="i => _instance = i" />
+    </div>
+
+    <div class="mt-8">
+        <div class="mb-4 flex gap-1 overflow-x-auto border-b border-navy-200">
+            @foreach (var (key, label) in Tabs)
+            {
+                <button class="-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors @(_tab == key ? "border-brand-600 text-brand-700" : "border-transparent text-navy-500 hover:text-navy-800")"
+                        @onclick="() => _tab = key">@label</button>
+            }
+        </div>
+        @switch (_tab)
+        {
+            case "messages":
+                <WaGate.Web.Components.Instances.MessagesPanel InstanceId="_instance.Id" />
+                break;
+            case "test":
+                <WaGate.Web.Components.Instances.IntegrationPanel Instance="_instance" />
+                break;
+            case "webhooks":
+                <WaGate.Web.Components.Instances.WebhooksPanel InstanceId="_instance.Id" />
+                break;
+        }
+    </div>
+
+    <WaGate.Web.Components.Instances.QrCodeModal @bind-Open="_qrOpen" InstanceId="_instance.Id" OnStatusChanged="Reload" />
+
+    <Modal @bind-Open="_renameOpen" Title="Renomear instância">
+        <ChildContent>
+            <label class="label">Nome</label>
+            <input class="input" @bind="_newName" />
+        </ChildContent>
+        <Footer>
+            <button class="btn-secondary" @onclick="() => _renameOpen = false">Cancelar</button>
+            <button class="btn-primary" disabled="@(string.IsNullOrWhiteSpace(_newName) || _newName.Trim().Length < 2)" @onclick="Rename">Salvar</button>
+        </Footer>
+    </Modal>
+
+    <Modal @bind-Open="_confirmLogout" Title="Desconectar número?">
+        <ChildContent><p class="text-sm text-navy-600">O aparelho sai dos “Aparelhos conectados” do WhatsApp e será preciso ler um novo QR Code. Webhooks e configurações são mantidos.</p></ChildContent>
+        <Footer>
+            <button class="btn-secondary" @onclick="() => _confirmLogout = false">Cancelar</button>
+            <button class="btn-danger" @onclick="Logout">Desconectar</button>
+        </Footer>
+    </Modal>
+
+    <Modal @bind-Open="_confirmRotate" Title="Gerar novo token?">
+        <ChildContent><p class="text-sm text-navy-600">As integrações que usam o token atual passam a receber 401 imediatamente.</p></ChildContent>
+        <Footer>
+            <button class="btn-secondary" @onclick="() => _confirmRotate = false">Cancelar</button>
+            <button class="btn-primary" @onclick="RotateToken">Gerar novo token</button>
+        </Footer>
+    </Modal>
+
+    <Modal @bind-Open="_confirmDelete" Title="Excluir instância?">
+        <ChildContent>
+            <p class="text-sm text-navy-600">Remove a sessão do WhatsApp, o histórico de mensagens e os webhooks. Não pode ser desfeito. Digite <b>@_instance.Name</b> para confirmar.</p>
+            <input class="input mt-3" @bind="_confirmText" @bind:event="oninput" />
+        </ChildContent>
+        <Footer>
+            <button class="btn-secondary" @onclick="() => _confirmDelete = false">Cancelar</button>
+            <button class="btn-danger" disabled="@(_confirmText != _instance.Name || _busy)" @onclick="Delete">Excluir definitivamente</button>
+        </Footer>
+    </Modal>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    [SupplyParameterFromQuery(Name = "qr")] public int? OpenQr { get; set; }
+
+    private static readonly (string, string)[] Tabs =
+    [
+        ("messages", "Mensagens"), ("test", "Teste de envio e exemplos"), ("webhooks", "Webhooks adicionais")
+    ];
+
+    private InstanceDto? _instance;
+    private string _tab = "messages";
+    private bool _busy, _menu, _qrOpen, _renameOpen, _confirmLogout, _confirmRotate, _confirmDelete;
+    private string? _newName, _confirmText;
+
+    private string PublicUrl => (Config["Api:PublicUrl"] ?? Config["Api:BaseUrl"] ?? "http://localhost:5080").TrimEnd('/');
+    private string ApiUrl => $"{PublicUrl}/instances/{_instance!.Id}/token/{_instance.Token}/send-text";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await Reload();
+        if (OpenQr == 1 && _instance is { Status: not "WORKING" }) _qrOpen = true;
+    }
+
+    private async Task Reload()
+    {
+        try { _instance = await Api.InstanceAsync(Id); }
+        catch (ApiException ex) when (ex.Status == System.Net.HttpStatusCode.NotFound)
+        {
+            Toasts.Error("Instância não encontrada.");
+            Nav.NavigateTo("");
+        }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+    }
+
+    private async Task Act(string action, string ok)
+    {
+        _menu = false;
+        _busy = true;
+        try { _instance = await Api.InstanceActionAsync(Id, action); Toasts.Success(ok); }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+        finally { _busy = false; }
+    }
+
+    private async Task Logout()
+    {
+        _confirmLogout = false;
+        await Act("logout", "Número desconectado");
+    }
+
+    private void OpenRename()
+    {
+        _menu = false;
+        _newName = _instance!.Name;
+        _renameOpen = true;
+    }
+
+    private async Task Rename()
+    {
+        try
+        {
+            _instance = await Api.UpdateInstanceAsync(Id, new UpdateInstanceRequest
+            {
+                Name = _newName!.Trim(), AutoReadMessages = _instance!.AutoReadMessages, RejectCalls = _instance.RejectCalls
+            });
+            _renameOpen = false;
+            Toasts.Success("Instância renomeada.");
+        }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+    }
+
+    private async Task RotateToken()
+    {
+        _confirmRotate = false;
+        try { _instance = await Api.RotateInstanceTokenAsync(Id); Toasts.Success("Novo token gerado."); }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+    }
+
+    private async Task Delete()
+    {
+        _busy = true;
+        try
+        {
+            await Api.DeleteInstanceAsync(Id);
+            Toasts.Success("Instância excluída.");
+            Nav.NavigateTo("");
+        }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+        finally { _busy = false; _confirmDelete = false; }
+    }
+}

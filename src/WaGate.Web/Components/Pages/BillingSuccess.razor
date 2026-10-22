@@ -1,0 +1,58 @@
+@page "/billing/success"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject SubscriptionState Subscription
+
+<PageTitle>Assinatura confirmada · WaGate</PageTitle>
+
+<div class="mx-auto max-w-md py-16 text-center">
+    @if (_sub is { IsUsable: true })
+    {
+        <div class="mx-auto grid h-16 w-16 place-items-center rounded-full bg-brand-500 text-navy-950"><Icon Name="check" Class="h-8 w-8" /></div>
+        <h1 class="mt-6 text-2xl font-bold text-navy-950 outline-none" tabindex="-1">Tudo pronto!</h1>
+        <p class="mt-2 text-navy-600">
+            @if (_sub.Status == "trialing")
+            {
+                <text>Seu teste grátis do plano @_sub.Plan começou e vai até <b>@Money.Date(_sub.TrialEndsAt)</b>.</text>
+            }
+            else
+            {
+                <text>Plano @_sub.Plan ativo com @_sub.Quantity instância(s).</text>
+            }
+        </p>
+        <a href="" class="btn-primary mt-8">Ir para minhas instâncias</a>
+    }
+    else if (_timedOut)
+    {
+        <h1 class="text-xl font-bold text-navy-950 outline-none" tabindex="-1">Estamos confirmando seu pagamento</h1>
+        <p class="mt-2 text-navy-600">O Stripe ainda não confirmou a assinatura. Isso costuma levar alguns segundos; atualize a página em instantes.</p>
+        <a href="billing" class="btn-secondary mt-6">Ver assinatura</a>
+    }
+    else
+    {
+        <Spinner Class="mx-auto h-10 w-10 text-brand-600" />
+        <h1 class="mt-6 text-xl font-bold text-navy-950 outline-none" tabindex="-1">Confirmando sua assinatura...</h1>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "session_id")] public string? SessionId { get; set; }
+
+    private SubscriptionDto? _sub;
+    private bool _timedOut;
+
+    protected override async Task OnInitializedAsync()
+    {
+        for (var i = 0; i < 10; i++)
+        {
+            try
+            {
+                _sub = await Api.SyncBillingAsync(SessionId);
+                if (_sub.IsUsable) { Subscription.Set(_sub); return; }
+            }
+            catch (ApiException) { }
+            await Task.Delay(1500);
+        }
+        _timedOut = true;
+    }
+}

@@ -1,0 +1,152 @@
+@inject ApiClient Api
+@inject ToastService Toasts
+
+@* "Webhooks e configurações gerais": um campo de URL por evento, como no painel da Z-API. *@
+<div class="card">
+    <div class="flex items-center justify-between border-b border-navy-100 px-6 py-4">
+        <div>
+            <h2 class="font-bold text-navy-950">Webhooks e configurações gerais</h2>
+            <p class="text-sm text-navy-500">URLs que recebem os eventos desta instância via POST.</p>
+        </div>
+        @if (!_editing)
+        {
+            <button class="btn-secondary" disabled="@(_hooks is null)" @onclick="StartEdit"><Icon Name="settings" /> Editar</button>
+        }
+    </div>
+
+    @if (_hooks is null)
+    {
+        <div class="flex justify-center py-12"><Spinner /></div>
+    }
+    else if (!_editing)
+    {
+        <dl class="divide-y divide-navy-100">
+            @foreach (var slot in Slots)
+            {
+                var url = UrlOf(slot);
+                <div class="grid gap-1 px-6 py-3.5 sm:grid-cols-3 sm:gap-4">
+                    <dt class="text-sm font-medium text-navy-700">@slot.Label</dt>
+                    <dd class="truncate font-mono text-[13px] sm:col-span-2 @(url is null ? "text-navy-400" : "text-navy-800")">@(url ?? "Não configurado")</dd>
+                </div>
+            }
+        </dl>
+        <div class="flex flex-wrap gap-x-6 gap-y-2 border-t border-navy-100 bg-navy-50/60 px-6 py-4 text-sm">
+            <Flag On="@NotifySentByMe" Label="Notificar as enviadas por mim também" />
+            <Flag On="@Instance.AutoReadMessages" Label="Ler mensagens automaticamente" />
+            <Flag On="@Instance.RejectCalls" Label="Rejeitar chamadas automaticamente" />
+        </div>
+    }
+    else
+    {
+        <div class="space-y-4 px-6 py-5">
+            @foreach (var slot in Slots)
+            {
+                <div class="grid gap-1.5 sm:grid-cols-3 sm:items-center sm:gap-4">
+                    <label class="text-sm font-medium text-navy-700">
+                        @slot.Label
+                        <span class="block text-xs font-normal text-navy-400">@slot.Hint</span>
+                    </label>
+                    <input class="input font-mono text-[13px] sm:col-span-2 @(Invalid(slot.Key) ? "!ring-red-400" : "")"
+                           placeholder="https://" @bind="_form[slot.Key]" @bind:event="oninput" />
+                </div>
+            }
+
+            <div class="space-y-3 border-t border-navy-100 pt-5">
+                <Toggle @bind-Value="_notifySentByMe" Label="Notificar as enviadas por mim também" Hint="O webhook “Ao receber” também recebe as mensagens que você envia (celular ou API)." />
+                <Toggle @bind-Value="_autoRead" Label="Ler mensagens automaticamente" Hint="Marca as mensagens recebidas como lidas (visto azul)." />
+                <Toggle @bind-Value="_rejectCalls" Label="Rejeitar chamadas automaticamente" Hint="Recusa ligações de voz e vídeo recebidas." />
+            </div>
+        </div>
+        <div class="flex justify-end gap-2 border-t border-navy-100 bg-navy-50/60 px-6 py-3">
+            <button class="btn-secondary" @onclick="() => _editing = false">Cancelar</button>
+            <button class="btn-primary" disabled="@_busy" @onclick="Save">
+                @if (_busy) { <Spinner Class="h-4 w-4 text-navy-950" /> } Salvar
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public InstanceDto Instance { get; set; } = default!;
+    [Parameter] public EventCallback<InstanceDto> InstanceChanged { get; set; }
+
+    public sealed record Slot(string Key, string Label, string Event, string Hint);
+
+    public static readonly Slot[] Slots =
+    [
+        new("received", "Ao receber", "message.received", "Mensagens recebidas"),
+        new("sent", "Ao enviar", "message.sent", "Confirma que a mensagem saiu"),
+        new("status", "Receber status da mensagem", "message.status", "Entregue, lida, reproduzida"),
+        new("connected", "Ao conectar", "instance.connected", "Número conectou"),
+        new("disconnected", "Ao desconectar", "instance.disconnected", "Número caiu ou foi desconectado"),
+        new("presence", "Presença do chat", "presence.update", "Digitando, online, gravando")
+    ];
+
+    private static string Tag(Slot s) => $"slot:{s.Key}";
+
+    private List<WebhookDto>? _hooks;
+    private bool _editing, _busy, _notifySentByMe, _autoRead, _rejectCalls;
+    private readonly Dictionary<string, string?> _form = new();
+
+    private WebhookDto? HookOf(Slot s) => _hooks?.FirstOrDefault(h => h.Description == Tag(s));
+    private string? UrlOf(Slot s) => HookOf(s)?.Url;
+    private bool NotifySentByMe => HookOf(Slots[0])?.Events.Contains("message.sent") == true;
+
+    private bool Invalid(string key) =>
+        !string.IsNullOrWhiteSpace(_form.GetValueOrDefault(key)) &&
+        !(Uri.TryCreate(_form[key]!.Trim(), UriKind.Absolute, out var u) && u.Scheme is "http" or "https");
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try { _hooks = await Api.WebhooksAsync(Instance.Id); }
+        catch (ApiException ex) { Toasts.Error(ex.Message); _hooks = []; }
+    }
+
+    private void StartEdit()
+    {
+        foreach (var s in Slots) _form[s.Key] = UrlOf(s);
+        _notifySentByMe = NotifySentByMe;
+        _autoRead = Instance.AutoReadMessages;
+        _rejectCalls = Instance.RejectCalls;
+        _editing = true;
+    }
+
+    private async Task Save()
+    {
+        if (Slots.Any(s => Invalid(s.Key))) { Toasts.Error("Corrija as URLs destacadas (use http:// ou https://)."); return; }
+        _busy = true;
+        try
+        {
+            foreach (var slot in Slots)
+            {
+                var url = _form.GetValueOrDefault(slot.Key)?.Trim();
+                var existing = HookOf(slot);
+                var events = slot.Key == "received" && _notifySentByMe ? new List<string> { slot.Event, "message.sent" } : [slot.Event];
+
+                if (string.IsNullOrEmpty(url))
+                {
+                    if (existing is not null) await Api.DeleteWebhookAsync(existing.Id);
+                    continue;
+                }
+                var req = new WebhookRequest { Url = url, Events = events, IsActive = true, Description = Tag(slot) };
+                if (existing is null) await Api.CreateWebhookAsync(Instance.Id, req);
+                else if (existing.Url != url || !existing.Events.SequenceEqual(events)) await Api.UpdateWebhookAsync(existing.Id, req);
+            }
+
+            if (_autoRead != Instance.AutoReadMessages || _rejectCalls != Instance.RejectCalls)
+            {
+                var updated = await Api.UpdateInstanceAsync(Instance.Id,
+                    new UpdateInstanceRequest { Name = Instance.Name, AutoReadMessages = _autoRead, RejectCalls = _rejectCalls });
+                await InstanceChanged.InvokeAsync(updated);
+            }
+
+            await Load();
+            _editing = false;
+            Toasts.Success("Configurações salvas.");
+        }
+        catch (ApiException ex) { Toasts.Error(ex.Message); await Load(); }
+        finally { _busy = false; }
+    }
+}

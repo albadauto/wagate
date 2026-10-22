@@ -1,0 +1,67 @@
+@page "/login"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+@inject ApiClient Api
+@inject AuthStateProvider Auth
+@inject NavigationManager Nav
+
+<PageTitle>Entrar · WaGate</PageTitle>
+
+<h1 class="text-2xl font-semibold tracking-tight outline-none" tabindex="-1">Entrar</h1>
+<p class="mt-1 text-sm text-navy-500">Acesse o painel para gerenciar suas instâncias.</p>
+
+<EditForm Model="_model" OnValidSubmit="Submit" FormName="login" class="mt-8 space-y-4">
+    <DataAnnotationsValidator />
+    <div>
+        <label class="label" for="email">E-mail</label>
+        <InputText id="email" @bind-Value="_model.Email" class="input" autocomplete="username" />
+        <ValidationMessage For="() => _model.Email" class="field-error" />
+    </div>
+    <div>
+        <label class="label" for="password">Senha</label>
+        <InputText id="password" type="password" @bind-Value="_model.Password" class="input" autocomplete="current-password" />
+        <ValidationMessage For="() => _model.Password" class="field-error" />
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">@_error</div>
+    }
+
+    <button type="submit" class="btn-primary w-full" disabled="@_busy">
+        @if (_busy) { <Spinner Class="h-4 w-4 text-navy-950" /> } Entrar
+    </button>
+</EditForm>
+
+<p class="mt-6 text-center text-sm text-navy-500">
+    Ainda não tem conta? <a href="register" class="font-medium text-brand-700 hover:underline">Criar conta</a>
+</p>
+
+@code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    private readonly LoginRequest _model = new();
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await Auth.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated == true) Nav.NavigateTo(SafeReturn, replace: true);
+    }
+
+    private string SafeReturn => string.IsNullOrEmpty(ReturnUrl) || ReturnUrl.Contains("://") || ReturnUrl.StartsWith("//") ? "" : ReturnUrl;
+
+    private async Task Submit()
+    {
+        _busy = true; _error = null;
+        try
+        {
+            var r = await Api.LoginAsync(_model);
+            await Auth.SignInAsync(r.AccessToken, r.ExpiresAt, r.Account.Name, r.Account.Email);
+            Nav.NavigateTo(SafeReturn, replace: true);
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+}

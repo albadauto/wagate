@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+@source "../Components/**/*.razor";
+
+@theme {
+  /* Cores da marca WaGate (logo): verde #01C38E e azul-marinho #01122F */
+  --color-brand-50: #e6fbf4;
+  --color-brand-100: #c2f5e3;
+  --color-brand-200: #8debcb;
+  --color-brand-300: #4fdfb0;
+  --color-brand-400: #1fd29c;
+  --color-brand-500: #01c38e;
+  --color-brand-600: #00a578;
+  --color-brand-700: #008462;
+  --color-brand-800: #036850;
+  --color-brand-900: #055643;
+  --color-brand-950: #013126;
+
+  --color-navy-50: #f4f6fa;
+  --color-navy-100: #e6ebf3;
+  --color-navy-200: #cbd4e4;
+  --color-navy-300: #a1b0cb;
+  --color-navy-400: #7086ac;
+  --color-navy-500: #4f6690;
+  --color-navy-600: #3c5076;
+  --color-navy-700: #2e3f5f;
+  --color-navy-800: #1c2a48;
+  --color-navy-900: #0d1b3a;
+  --color-navy-950: #01122f;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@utility card {
+  @apply rounded-2xl bg-white shadow-sm ring-1 ring-zinc-900/5;
+}
+
+@utility label {
+  @apply mb-1.5 block text-sm font-medium text-zinc-700;
+}
+
+@utility input {
+  @apply block w-full rounded-lg border-0 bg-white px-3 py-2 text-sm text-zinc-900 shadow-xs ring-1 ring-zinc-300 ring-inset placeholder:text-zinc-400 focus:ring-2 focus:ring-brand-600 focus:outline-none;
+}
+
+.input.invalid {
+  @apply ring-red-400;
+}
+
+@utility checkbox {
+  @apply h-4 w-4 rounded border-zinc-300 accent-brand-600;
+}
+
+@utility field-error {
+  @apply mt-1 block text-xs text-red-600;
+}
+
+@utility validation-message {
+  @apply mt-1 block text-xs text-red-600;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+@utility btn-primary {
+  @apply btn bg-brand-500 font-semibold text-navy-950 shadow-sm hover:bg-brand-400 focus-visible:outline-brand-600;
+}
+
+@utility btn-secondary {
+  @apply btn bg-white text-zinc-800 shadow-xs ring-1 ring-zinc-300 ring-inset hover:bg-zinc-50;
+}
+
+@utility btn-danger {
+  @apply btn bg-red-600 text-white shadow-sm hover:bg-red-700;
+}
+
+@utility btn-danger-ghost {
+  @apply btn text-red-600 ring-1 ring-red-200 ring-inset hover:bg-red-50;
+}
+
+@utility btn-sm {
+  @apply px-2.5 py-1.5 text-xs;
+}
+
+@utility code {
+  @apply rounded bg-zinc-100 px-1 py-0.5 font-mono text-[12px] text-zinc-800;
+}
+
+#blazor-error-ui {
+  display: none;
+}
+
+@utility menu-item {
+  @apply flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-navy-700 hover:bg-navy-50;
+}
+
+/* Slider do plano Partner */
+.partner-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.12);
+  outline: none;
+}
+.partner-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 5px solid var(--color-brand-400);
+  box-shadow: 0 0 0 6px rgb(31 210 156 / 0.25);
+  cursor: pointer;
+}
+.partner-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 5px solid var(--color-brand-400);
+  box-shadow: 0 0 0 6px rgb(31 210 156 / 0.25);
+  cursor: pointer;
+}

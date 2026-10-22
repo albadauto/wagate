@@ -1,0 +1,96 @@
+@inherits LayoutComponentBase
+@inject AuthStateProvider Auth
+@inject NavigationManager Nav
+@inject IConfiguration Config
+@inject SubscriptionState Subscription
+
+<div class="min-h-screen bg-navy-50 lg:pl-60">
+    @* Menu lateral *@
+    <aside class="fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-navy-200 bg-white transition-transform lg:trannavy-x-0 @(_menuOpen ? "trannavy-x-0 shadow-xl" : "-trannavy-x-full")">
+        <a href="" class="flex h-16 items-center border-b border-navy-100 px-5">
+            <img src="img/logo.png" alt="WaGate" class="h-7 w-auto" />
+        </a>
+
+        <nav class="flex-1 space-y-1 px-3 py-5 text-sm" @onclick="() => _menuOpen = false">
+            <NavItem Href="" Icon="phone" Match="NavLinkMatch.All" Also="instances">Instâncias</NavItem>
+            <NavItem Href="overview" Icon="dashboard">Visão geral</NavItem>
+            <NavItem Href="billing" Icon="card" Also="plans">Plano e cobrança</NavItem>
+            <NavItem Href="security" Icon="key">Segurança</NavItem>
+            <NavItem Href="deliveries" Icon="webhook">Logs de webhook</NavItem>
+            <a href="@DocsUrl" target="_blank" class="flex items-center gap-3 rounded-lg px-3 py-2.5 font-medium text-navy-600 hover:bg-navy-100 hover:text-navy-950">
+                <Icon Name="book" /> Documentação
+                <Icon Name="arrow-out" Class="ml-auto h-3.5 w-3.5 text-navy-400" />
+            </a>
+        </nav>
+
+        <div class="m-3 rounded-xl bg-brand-50 p-4 text-xs text-brand-900">
+            <div class="font-semibold">Precisa integrar?</div>
+            <p class="mt-1 text-brand-800/80">Todos os endpoints, exemplos e schemas estão na documentação.</p>
+            <a href="@DocsUrl" target="_blank" class="mt-2 inline-block font-semibold text-brand-700 hover:underline">Abrir docs →</a>
+        </div>
+    </aside>
+
+    @if (_menuOpen)
+    {
+        <div class="fixed inset-0 z-20 bg-navy-900/30 lg:hidden" @onclick="() => _menuOpen = false"></div>
+    }
+
+    @* Barra superior *@
+    <header class="sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-navy-200 bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
+        <button class="rounded-md p-1.5 text-navy-600 hover:bg-navy-100 lg:hidden" @onclick="() => _menuOpen = true"><Icon Name="menu" Class="h-5 w-5" /></button>
+        <img src="img/logo.png" alt="WaGate" class="h-6 w-auto lg:hidden" />
+        <div class="ml-auto relative">
+            <button class="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-navy-100" @onclick="() => _userOpen = !_userOpen">
+                <div class="hidden text-right sm:block">
+                    <div class="text-sm font-semibold leading-tight text-navy-800">@Auth.Name</div>
+                    <div class="text-xs text-navy-500">@Auth.Email</div>
+                </div>
+                <div class="grid h-9 w-9 place-items-center rounded-full bg-navy-950 text-xs font-bold text-brand-400">@Initials</div>
+            </button>
+            @if (_userOpen)
+            {
+                <div class="fixed inset-0 z-10" @onclick="() => _userOpen = false"></div>
+                <div class="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-xl bg-white py-1 text-sm shadow-lg ring-1 ring-navy-200">
+                    <a href="security" class="flex items-center gap-2 px-4 py-2 text-navy-700 hover:bg-navy-50" @onclick="() => _userOpen = false"><Icon Name="key" /> Segurança</a>
+                    <button class="flex w-full items-center gap-2 px-4 py-2 text-left text-red-600 hover:bg-red-50" @onclick="Logout"><Icon Name="logout" /> Sair</button>
+                </div>
+            }
+        </div>
+    </header>
+
+    <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <SubscriptionBanner />
+        @Body
+    </main>
+</div>
+
+<Toasts />
+
+<div id="blazor-error-ui" data-nosnippet class="fixed inset-x-0 bottom-0 z-50 bg-red-600 px-4 py-3 text-sm text-white">
+    Ocorreu um erro inesperado.
+    <a href="." class="reload ml-2 underline">Recarregar</a>
+    <span class="dismiss float-right cursor-pointer">✕</span>
+</div>
+
+@code {
+    private bool _menuOpen, _userOpen;
+
+    private string DocsUrl => (Config["Api:PublicUrl"] ?? Config["Api:BaseUrl"] ?? "http://localhost:5080").TrimEnd('/') + "/docs";
+
+    private string Initials
+    {
+        get
+        {
+            var parts = (Auth.Name ?? "?").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return string.Concat(parts.Take(2).Select(p => char.ToUpperInvariant(p[0])));
+        }
+    }
+
+    private async Task Logout()
+    {
+        _userOpen = false;
+        Subscription.Clear();
+        await Auth.SignOutAsync();
+        Nav.NavigateTo("login", replace: true);
+    }
+}

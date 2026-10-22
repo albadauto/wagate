@@ -1,0 +1,158 @@
+@page "/deliveries"
+@attribute [Authorize]
+@implements IDisposable
+@inject ApiClient Api
+@inject ToastService Toasts
+
+<PageTitle>Entregas de webhook · WaGate</PageTitle>
+
+<PageHeader Title="Entregas de webhook" Subtitle="Cada evento enviado aos seus endpoints, com tentativas, tempo de resposta e retorno.">
+    <Actions>
+        <label class="flex items-center gap-2 text-sm text-navy-600"><input type="checkbox" class="checkbox" @bind="_auto" /> Atualizar sozinho</label>
+        <button class="btn-secondary" @onclick="Load"><Icon Name="refresh" /> Atualizar</button>
+    </Actions>
+</PageHeader>
+
+<div class="card overflow-hidden">
+    <div class="flex flex-col gap-3 border-b border-navy-100 p-4 md:flex-row md:items-center">
+        <select class="input md:max-w-56" @bind="_instance" @bind:after="Reload">
+            <option value="">Todas as instâncias</option>
+            @foreach (var i in _instances) { <option value="@i.Id">@i.Name</option> }
+        </select>
+        <select class="input md:max-w-44" @bind="_status" @bind:after="Reload">
+            <option value="">Todos os status</option>
+            <option value="Pending">Pendente</option>
+            <option value="Succeeded">Entregue</option>
+            <option value="Failed">Falhou (vai repetir)</option>
+            <option value="Dead">Descartada</option>
+        </select>
+        <select class="input md:max-w-52" @bind="_event" @bind:after="Reload">
+            <option value="">Todos os eventos</option>
+            @foreach (var e in _events) { <option value="@e">@e</option> }
+            <option value="webhook.test">webhook.test</option>
+        </select>
+    </div>
+
+    @if (_page is null)
+    {
+        <div class="flex justify-center py-16"><Spinner /></div>
+    }
+    else if (_page.Items.Count == 0)
+    {
+        <div class="py-16 text-center text-sm text-navy-500">Nenhuma entrega encontrada.</div>
+    }
+    else
+    {
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-navy-50 text-left text-xs uppercase tracking-wide text-navy-500">
+                    <tr>
+                        <th class="px-4 py-2.5 font-medium">Evento</th>
+                        <th class="px-4 py-2.5 font-medium">Destino</th>
+                        <th class="px-4 py-2.5 font-medium">Status</th>
+                        <th class="px-4 py-2.5 font-medium">HTTP</th>
+                        <th class="px-4 py-2.5 font-medium">Tentativas</th>
+                        <th class="px-4 py-2.5 font-medium">Criada</th>
+                        <th class="px-4 py-2.5"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-navy-100">
+                    @foreach (var d in _page.Items)
+                    {
+                        <tr class="hover:bg-navy-50/60">
+                            <td class="px-4 py-3 font-mono text-[12px]">@d.Event</td>
+                            <td class="max-w-xs truncate px-4 py-3 font-mono text-[12px] text-navy-500" title="@d.WebhookUrl">@d.WebhookUrl</td>
+                            <td class="px-4 py-3">
+                                <StatusBadge Status="@d.Status.ToUpperInvariant()" />
+                                @if (d.Status == "Failed") { <div class="mt-1 text-[11px] text-navy-400">próxima @d.NextAttemptAt.ToLocalTime().ToString("HH:mm:ss")</div> }
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3 tabular-nums @(d.LastStatusCode is >= 200 and < 300 ? "text-brand-700" : "text-navy-600")">
+                                @(d.LastStatusCode?.ToString() ?? "—") @if (d.LastDurationMs is not null) { <span class="text-xs text-navy-400">· @d.LastDurationMs ms</span> }
+                            </td>
+                            <td class="px-4 py-3 tabular-nums">@d.Attempts/@d.MaxAttempts</td>
+                            <td class="whitespace-nowrap px-4 py-3 text-navy-500">@d.CreatedAt.ToLocalTime().ToString("dd/MM HH:mm:ss")</td>
+                            <td class="whitespace-nowrap px-4 py-3 text-right">
+                                <button class="btn-secondary btn-sm" @onclick="() => Open(d.Id)">Detalhes</button>
+                                @if (d.Status is "Failed" or "Dead")
+                                {
+                                    <button class="btn-secondary btn-sm ml-1" @onclick="() => Retry(d.Id)"><Icon Name="refresh" Class="h-3.5 w-3.5" /></button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <Pager Page="_page.Page" TotalPages="_page.TotalPages" Total="_page.Total" PageChanged="Go" />
+    }
+</div>
+
+<Modal Open="_detail is not null" OpenChanged="_ => _detail = null" Title="Detalhe da entrega" Width="max-w-2xl">
+    <ChildContent>
+        @if (_detail is not null)
+        {
+            var d = _detail.Delivery;
+            <dl class="grid grid-cols-2 gap-3 text-sm">
+                <div><dt class="text-xs text-navy-500">Evento</dt><dd class="font-mono">@d.Event</dd></div>
+                <div><dt class="text-xs text-navy-500">Status</dt><dd><StatusBadge Status="@d.Status.ToUpperInvariant()" /></dd></div>
+                <div class="col-span-2"><dt class="text-xs text-navy-500">Destino</dt><dd class="break-all font-mono text-[12px]">@d.WebhookUrl</dd></div>
+                <div><dt class="text-xs text-navy-500">Último HTTP</dt><dd>@(d.LastStatusCode?.ToString() ?? "—") · @(d.LastDurationMs?.ToString() ?? "—") ms</dd></div>
+                <div><dt class="text-xs text-navy-500">ID (X-WaGate-Delivery)</dt><dd class="font-mono text-[11px]">@d.Id</dd></div>
+                @if (d.LastError is not null) { <div class="col-span-2"><dt class="text-xs text-navy-500">Erro</dt><dd class="text-red-600">@d.LastError</dd></div> }
+            </dl>
+            <div class="mt-5 text-xs font-medium text-navy-500">Payload</div>
+            <pre class="mt-1 max-h-72 overflow-auto rounded-lg bg-navy-900 p-3 font-mono text-[12px] text-navy-200">@WaGate.Web.Components.Instances.WebhooksPanel.Pretty(_detail.Payload)</pre>
+            <div class="mt-4 text-xs font-medium text-navy-500">Resposta do seu servidor</div>
+            <pre class="mt-1 max-h-40 overflow-auto rounded-lg bg-navy-50 p-3 font-mono text-[12px] text-navy-700 ring-1 ring-navy-200">@(string.IsNullOrEmpty(_detail.LastResponse) ? "(vazia)" : _detail.LastResponse)</pre>
+        }
+    </ChildContent>
+</Modal>
+
+@code {
+    [SupplyParameterFromQuery(Name = "instance")] public Guid? InstanceQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "webhook")] public Guid? WebhookQuery { get; set; }
+
+    private PagedResult<DeliveryDto>? _page;
+    private List<InstanceDto> _instances = [];
+    private List<string> _events = [];
+    private string _instance = "", _status = "", _event = "";
+    private int _current = 1;
+    private DeliveryDetailDto? _detail;
+    private bool _auto = true;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (InstanceQuery is not null) _instance = InstanceQuery.Value.ToString();
+        try { _instances = await Api.InstancesAsync(); _events = await Api.EventsAsync(); } catch (ApiException) { }
+        await Load();
+        _timer = new Timer(_ => InvokeAsync(async () => { if (_auto && _detail is null) { await Load(); StateHasChanged(); } }), null, 5000, 5000);
+    }
+
+    private async Task Load()
+    {
+        try
+        {
+            var page = await Api.DeliveriesAsync(_current, Guid.TryParse(_instance, out var id) ? id : null, _status, _event);
+            _page = WebhookQuery is null ? page : page with { Items = page.Items.Where(d => d.WebhookId == WebhookQuery).ToList() };
+        }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+    }
+
+    private Task Reload() { _current = 1; return Load(); }
+    private Task Go(int p) { _current = p; return Load(); }
+
+    private async Task Open(Guid id)
+    {
+        try { _detail = await Api.DeliveryAsync(id); }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+    }
+
+    private async Task Retry(Guid id)
+    {
+        try { await Api.RetryDeliveryAsync(id); Toasts.Info("Entrega reenfileirada."); await Load(); }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

@@ -1,0 +1,151 @@
+@implements IDisposable
+@inject ApiClient Api
+@inject ToastService Toasts
+
+@if (Open)
+{
+    <div class="fixed inset-0 z-40 flex items-center justify-center bg-navy-900/50 p-4 backdrop-blur-[2px]" @onclick="Close">
+        <div class="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl" @onclick:stopPropagation="true">
+            <div class="flex items-center justify-between border-b border-navy-100 px-6 py-4">
+                <h2 class="text-lg font-bold text-navy-950">Conectar WhatsApp</h2>
+                <button class="rounded-md p-1 text-navy-400 hover:bg-navy-100 hover:text-navy-700" @onclick="Close"><Icon Name="x" Class="h-5 w-5" /></button>
+            </div>
+
+            <div class="grid gap-8 p-6 md:grid-cols-2">
+                <div>
+                    <ol class="space-y-5">
+                        @foreach (var (n, html) in Steps)
+                        {
+                            <li class="flex gap-3">
+                                <span class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-500 text-xs font-bold text-navy-950">@n</span>
+                                <span class="pt-0.5 text-sm text-navy-700">@((MarkupString)html)</span>
+                            </li>
+                        }
+                    </ol>
+
+                    <div class="mt-8 border-t border-navy-100 pt-5">
+                        @if (!_pairMode)
+                        {
+                            <button class="text-sm font-semibold text-brand-700 hover:underline" @onclick="() => _pairMode = true">Conectar com número de telefone</button>
+                        }
+                        else
+                        {
+                            <label class="label">Número com DDI</label>
+                            <div class="flex gap-2">
+                                <input class="input" placeholder="5511999999999" @bind="_phone" />
+                                <button class="btn-primary shrink-0" disabled="@_busy" @onclick="RequestCode">Gerar código</button>
+                            </div>
+                            @if (_code is not null)
+                            {
+                                <div class="mt-4 rounded-xl bg-navy-50 p-4 text-center">
+                                    <div class="text-xs text-navy-500">Digite no celular</div>
+                                    <div class="mt-1 font-mono text-3xl font-bold tracking-[0.25em] text-navy-950">@_code</div>
+                                </div>
+                            }
+                            <button class="mt-3 text-sm font-semibold text-brand-700 hover:underline" @onclick="() => _pairMode = false">Voltar para o QR Code</button>
+                        }
+                    </div>
+                </div>
+
+                <div class="flex flex-col items-center justify-center">
+                    <div class="relative grid h-72 w-72 place-items-center rounded-2xl border-2 border-navy-100 bg-white p-3">
+                        @if (_qr?.Image is not null)
+                        {
+                            <img src="@_qr.Image" alt="QR Code" class="h-full w-full" />
+                        }
+                        else
+                        {
+                            <div class="flex flex-col items-center gap-3 px-6 text-center text-sm text-navy-500">
+                                <Spinner Class="h-8 w-8 text-brand-600" />
+                                @(_qr?.Message ?? "Gerando QR Code...")
+                            </div>
+                        }
+                    </div>
+                    <p class="mt-4 flex items-center gap-2 text-xs text-navy-500">
+                        <span class="h-2 w-2 animate-pulse rounded-full bg-brand-500"></span>
+                        O QR Code é atualizado automaticamente
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter, EditorRequired] public Guid InstanceId { get; set; }
+    /// <summary>Disparado ao conectar ou fechar o modal (para recarregar o status).</summary>
+    [Parameter] public EventCallback OnStatusChanged { get; set; }
+
+    private static readonly (int, string)[] Steps =
+    [
+        (1, "Abra o <b>WhatsApp</b> no seu celular."),
+        (2, "Toque em <b>Mais opções</b> (Android) ou <b>Configurações</b> (iPhone)."),
+        (3, "Toque em <b>Aparelhos conectados</b> e depois em <b>Conectar um aparelho</b>."),
+        (4, "Aponte o celular para esta tela para capturar o QR Code.")
+    ];
+
+    private QrCodeDto? _qr;
+    private Timer? _timer;
+    private bool _pairMode, _busy, _wasOpen;
+    private string? _phone, _code;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Open && !_wasOpen)
+        {
+            _wasOpen = true;
+            _qr = null; _code = null; _pairMode = false;
+            try { await Api.InstanceActionAsync(InstanceId, "start"); } catch (ApiException) { }
+            await Poll();
+            _timer = new Timer(_ => InvokeAsync(async () => { await Poll(); StateHasChanged(); }), null, 3000, 3000);
+        }
+        else if (!Open && _wasOpen)
+        {
+            Stop();
+        }
+    }
+
+    private async Task Poll()
+    {
+        if (!Open) return;
+        try
+        {
+            _qr = await Api.QrAsync(InstanceId);
+            if (_qr.Status == "WORKING")
+            {
+                Stop();
+                Toasts.Success("WhatsApp conectado com sucesso!");
+                await OpenChanged.InvokeAsync(false);
+                await OnStatusChanged.InvokeAsync();
+            }
+        }
+        catch (ApiException ex) { _qr = new QrCodeDto("", null, null, ex.Message); }
+    }
+
+    private async Task RequestCode()
+    {
+        if (string.IsNullOrWhiteSpace(_phone)) return;
+        _busy = true;
+        try { _code = (await Api.PairingCodeAsync(InstanceId, _phone)).Code; }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+        finally { _busy = false; }
+    }
+
+    private async Task Close()
+    {
+        Stop();
+        await OpenChanged.InvokeAsync(false);
+        await OnStatusChanged.InvokeAsync(); // recarrega o status na página
+    }
+
+    private void Stop()
+    {
+        _wasOpen = false;
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

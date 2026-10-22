@@ -1,0 +1,13 @@
+<div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-navy-300 bg-white px-6 py-14 text-center">
+    <div class="mb-3 rounded-full bg-brand-50 p-3 text-brand-600"><Icon Name="@IconName" Class="h-6 w-6" /></div>
+    <h3 class="font-semibold">@Title</h3>
+    @if (!string.IsNullOrEmpty(Text)) { <p class="mt-1 max-w-sm text-sm text-navy-500">@Text</p> }
+    @if (ChildContent is not null) { <div class="mt-5">@ChildContent</div> }
+</div>
+
+@code {
+    [Parameter] public string IconName { get; set; } = "phone";
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,139 @@
+@page "/register"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+@inject ApiClient Api
+@inject AuthStateProvider Auth
+@inject NavigationManager Nav
+
+<PageTitle>Criar conta · WaGate</PageTitle>
+
+<h1 class="text-2xl font-bold tracking-tight text-navy-950 outline-none" tabindex="-1">Crie sua conta</h1>
+<p class="mt-1 text-sm text-navy-500">Comece com <b class="text-brand-700">7 dias grátis</b> no plano Ultimate.</p>
+
+<EditForm Model="_model" OnValidSubmit="Submit" FormName="register" class="mt-7 space-y-4" autocomplete="on">
+    <DataAnnotationsValidator />
+
+    <div>
+        <label class="label" for="name">Nome completo</label>
+        <InputText id="name" @bind-Value="_model.Name" class="input" autocomplete="name" />
+        <ValidationMessage For="() => _model.Name" class="field-error" />
+    </div>
+
+    <div>
+        <label class="label" for="email">E-mail</label>
+        <InputText id="email" type="email" @bind-Value="_model.Email" class="input" autocomplete="email" />
+        <ValidationMessage For="() => _model.Email" class="field-error" />
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+            <label class="label" for="phone">WhatsApp</label>
+            <InputText id="phone" @bind-Value="_model.Phone" @bind-Value:after="FormatPhone" class="input" placeholder="(11) 99999-9999" autocomplete="tel" inputmode="tel" />
+            <ValidationMessage For="() => _model.Phone" class="field-error" />
+        </div>
+        <div>
+            <label class="label" for="doc">CPF ou CNPJ</label>
+            <InputText id="doc" @bind-Value="_model.Document" @bind-Value:after="FormatDoc" class="input" inputmode="numeric" />
+            <ValidationMessage For="() => _model.Document" class="field-error" />
+        </div>
+    </div>
+
+    @if (BrDocs.Digits(_model.Document).Length == 14)
+    {
+        <div>
+            <label class="label" for="company">Razão social / nome da empresa</label>
+            <InputText id="company" @bind-Value="_model.CompanyName" class="input" autocomplete="organization" />
+        </div>
+    }
+
+    <div>
+        <label class="label" for="password">Senha</label>
+        <div class="relative">
+            <InputText id="password" type="@(_show ? "text" : "password")" @bind-Value="_model.Password" @oninput="e => _model.Password = e.Value?.ToString() ?? string.Empty" class="input pr-10" autocomplete="new-password" />
+            <button type="button" tabindex="-1" class="absolute inset-y-0 right-0 px-3 text-navy-400 hover:text-navy-700" @onclick="() => _show = !_show"><Icon Name="eye" /></button>
+        </div>
+        @if (!string.IsNullOrEmpty(_model.Password))
+        {
+            var score = BrDocs.PasswordScore(_model.Password);
+            <div class="mt-2 flex gap-1">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <span class="h-1 flex-1 rounded-full @(i < score ? ScoreColor(score) : "bg-navy-100")"></span>
+                }
+            </div>
+            <ul class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                <Rule Ok="_model.Password.Length >= 8" Text="8+ caracteres" />
+                <Rule Ok="_model.Password.Any(char.IsUpper)" Text="Letra maiúscula" />
+                <Rule Ok="_model.Password.Any(char.IsLower)" Text="Letra minúscula" />
+                <Rule Ok="_model.Password.Any(char.IsDigit)" Text="Número" />
+            </ul>
+        }
+        <ValidationMessage For="() => _model.Password" class="field-error" />
+    </div>
+
+    <div>
+        <label class="label" for="confirm">Confirme a senha</label>
+        <InputText id="confirm" type="@(_show ? "text" : "password")" @bind-Value="_model.ConfirmPassword" class="input" autocomplete="new-password" />
+        <ValidationMessage For="() => _model.ConfirmPassword" class="field-error" />
+    </div>
+
+    @* Campo-armadilha: invisível para pessoas, bots costumam preencher *@
+    <div class="absolute -left-[10000px] h-0 w-0 overflow-hidden" aria-hidden="true">
+        <label for="website">Website</label>
+        <InputText id="website" @bind-Value="_model.Website" tabindex="-1" autocomplete="off" />
+    </div>
+
+    <label class="flex items-start gap-2.5 text-sm text-navy-600">
+        <InputCheckbox @bind-Value="_model.AcceptTerms" class="checkbox mt-0.5" />
+        <span>Li e aceito os <a href="terms" target="_blank" class="font-medium text-brand-700 hover:underline">Termos de uso</a> e a <a href="terms#privacidade" target="_blank" class="font-medium text-brand-700 hover:underline">Política de privacidade</a>.</span>
+    </label>
+    <ValidationMessage For="() => _model.AcceptTerms" class="field-error" />
+
+    @if (_error is not null)
+    {
+        <div class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">@_error</div>
+    }
+
+    <button type="submit" class="btn-primary w-full" disabled="@_busy">
+        @if (_busy) { <Spinner Class="h-4 w-4 text-navy-950" /> } Criar conta
+    </button>
+</EditForm>
+
+<p class="mt-6 text-center text-sm text-navy-500">
+    Já tem conta? <a href="login" class="font-medium text-brand-700 hover:underline">Entrar</a>
+</p>
+
+@code {
+    private readonly RegisterRequest _model = new();
+    private string? _error;
+    private bool _busy, _show;
+
+    private void FormatPhone()
+    {
+        var d = BrDocs.Digits(_model.Phone);
+        if (d.StartsWith("55") && d.Length > 11) d = d[2..];
+        _model.Phone = d.Length switch
+        {
+            11 => $"({d[..2]}) {d[2..7]}-{d[7..]}",
+            10 => $"({d[..2]}) {d[2..6]}-{d[6..]}",
+            _ => _model.Phone
+        };
+    }
+
+    private void FormatDoc() => _model.Document = BrDocs.FormatDocument(_model.Document);
+
+    private static string ScoreColor(int s) => s switch { <= 1 => "bg-red-500", 2 => "bg-amber-400", 3 => "bg-brand-400", _ => "bg-brand-600" };
+
+    private async Task Submit()
+    {
+        _busy = true; _error = null;
+        try
+        {
+            var r = await Api.RegisterAsync(_model);
+            await Auth.SignInAsync(r.AccessToken, r.ExpiresAt, r.Account.Name, r.Account.Email);
+            Nav.NavigateTo("plans?welcome=1", replace: true);
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+}

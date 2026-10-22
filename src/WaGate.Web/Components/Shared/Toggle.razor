@@ -1,0 +1,18 @@
+<label class="flex cursor-pointer items-start gap-3">
+    <button type="button" role="switch" aria-checked="@Value"
+            class="relative mt-0.5 inline-flex h-5 w-9 shrink-0 rounded-full transition-colors @(Value ? "bg-brand-600" : "bg-navy-300")"
+            @onclick="() => ValueChanged.InvokeAsync(!Value)">
+        <span class="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all @(Value ? "left-[18px]" : "left-0.5")"></span>
+    </button>
+    <span class="text-sm">
+        <span class="font-medium text-navy-800">@Label</span>
+        @if (Hint is not null) { <span class="block text-xs text-navy-500">@Hint</span> }
+    </span>
+</label>
+
+@code {
+    [Parameter] public bool Value { get; set; }
+    [Parameter] public EventCallback<bool> ValueChanged { get; set; }
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string? Hint { get; set; }
+}

@@ -1,0 +1,189 @@
+@page "/"
+@page "/instances"
+@attribute [Authorize]
+@implements IDisposable
+@inject ApiClient Api
+@inject ToastService Toasts
+@inject NavigationManager Nav
+
+<PageTitle>Instâncias · WaGate</PageTitle>
+
+<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+        <h1 class="text-2xl font-bold tracking-tight text-navy-950 outline-none" tabindex="-1">Instâncias</h1>
+        <p class="mt-1 text-sm text-navy-500">Gerencie seus números de WhatsApp conectados.</p>
+    </div>
+    <button class="btn-primary" @onclick="() => _createOpen = true"><Icon Name="plus" /> Adicionar instância</button>
+</div>
+
+<WahaHealth Compact="true" />
+
+@if (_items is not null && _items.Count > 0)
+{
+    <div class="mb-6 grid gap-4 sm:grid-cols-3">
+        <div class="card flex items-center gap-4 p-5">
+            <div class="grid h-11 w-11 place-items-center rounded-xl bg-navy-100 text-navy-600"><Icon Name="phone" Class="h-5 w-5" /></div>
+            <div><div class="text-2xl font-bold tabular-nums">@_items.Count</div><div class="text-sm text-navy-500">Instâncias</div></div>
+        </div>
+        <div class="card flex items-center gap-4 p-5">
+            <div class="grid h-11 w-11 place-items-center rounded-xl bg-brand-50 text-brand-600"><Icon Name="check" Class="h-5 w-5" /></div>
+            <div><div class="text-2xl font-bold tabular-nums">@_items.Count(i => i.Status == "WORKING")</div><div class="text-sm text-navy-500">Conectadas</div></div>
+        </div>
+        <div class="card flex items-center gap-4 p-5">
+            <div class="grid h-11 w-11 place-items-center rounded-xl bg-red-50 text-red-500"><Icon Name="alert" Class="h-5 w-5" /></div>
+            <div><div class="text-2xl font-bold tabular-nums">@_items.Count(i => i.Status != "WORKING")</div><div class="text-sm text-navy-500">Desconectadas</div></div>
+        </div>
+    </div>
+}
+
+<div class="card overflow-hidden">
+    <div class="flex flex-col gap-3 border-b border-navy-100 p-4 sm:flex-row sm:items-center">
+        <div class="relative sm:max-w-xs sm:flex-1">
+            <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -trannavy-y-1/2 text-navy-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+            <input class="input pl-9" placeholder="Buscar por nome, ID ou número" @bind="_search" @bind:event="oninput" />
+        </div>
+        <select class="input sm:w-44" @bind="_filter">
+            <option value="">Todos os status</option>
+            <option value="on">Conectadas</option>
+            <option value="off">Desconectadas</option>
+        </select>
+        <button class="btn-secondary sm:ml-auto" @onclick="Load"><Icon Name="refresh" /> Atualizar</button>
+    </div>
+
+    @if (_items is null)
+    {
+        <div class="flex justify-center py-20"><Spinner /></div>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="flex flex-col items-center px-6 py-16 text-center">
+            <div class="grid h-14 w-14 place-items-center rounded-full bg-brand-50 text-brand-600"><Icon Name="phone" Class="h-6 w-6" /></div>
+            <h3 class="mt-4 font-semibold">Você ainda não tem instâncias</h3>
+            <p class="mt-1 max-w-sm text-sm text-navy-500">Adicione uma instância e leia o QR Code com o WhatsApp do celular para começar a enviar mensagens pela API.</p>
+            <button class="btn-primary mt-5" @onclick="() => _createOpen = true"><Icon Name="plus" /> Adicionar instância</button>
+        </div>
+    }
+    else
+    {
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-navy-50 text-left text-xs font-semibold uppercase tracking-wide text-navy-500">
+                    <tr>
+                        <th class="px-5 py-3">Nome</th>
+                        <th class="px-5 py-3">ID da instância</th>
+                        <th class="px-5 py-3">Número</th>
+                        <th class="px-5 py-3">Status</th>
+                        <th class="px-5 py-3">Criada em</th>
+                        <th class="px-5 py-3 text-right">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-navy-100">
+                    @foreach (var i in Filtered)
+                    {
+                        <tr class="cursor-pointer hover:bg-navy-50" @onclick='() => Nav.NavigateTo($"instances/{i.Id}")'>
+                            <td class="px-5 py-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="grid h-9 w-9 shrink-0 place-items-center rounded-full @(i.Status == "WORKING" ? "bg-brand-100 text-brand-700" : "bg-navy-100 text-navy-500") text-xs font-bold">@Abbr(i.Name)</div>
+                                    <div>
+                                        <div class="font-semibold text-navy-950">@i.Name</div>
+                                        @if (i.PushName is not null) { <div class="text-xs text-navy-500">@i.PushName</div> }
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-5 py-4 font-mono text-xs text-navy-500">@i.Id.ToString("N")[..12].ToUpperInvariant()…</td>
+                            <td class="whitespace-nowrap px-5 py-4 text-navy-700">@(i.PhoneNumber is null ? "—" : FormatPhone(i.PhoneNumber))</td>
+                            <td class="px-5 py-4"><ConnectionPill Status="@i.Status" /></td>
+                            <td class="whitespace-nowrap px-5 py-4 text-navy-500">@i.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy")</td>
+                            <td class="px-5 py-4 text-right">
+                                <a href="instances/@i.Id" class="btn-secondary btn-sm" @onclick:stopPropagation="true"><Icon Name="eye" Class="h-3.5 w-3.5" /> Visualizar</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            @if (!Filtered.Any())
+            {
+                <div class="py-10 text-center text-sm text-navy-500">Nenhuma instância corresponde ao filtro.</div>
+            }
+        </div>
+    }
+</div>
+
+<Modal @bind-Open="_createOpen" Title="Adicionar instância">
+    <ChildContent>
+        <EditForm id="create-instance" Model="_new" OnValidSubmit="Create" FormName="create-instance" class="space-y-4">
+            <DataAnnotationsValidator />
+            <div>
+                <label class="label" for="iname">Nome da instância</label>
+                <InputText id="iname" @bind-Value="_new.Name" class="input" placeholder="Ex.: Atendimento, Vendas, Financeiro" />
+                <ValidationMessage For="() => _new.Name" class="field-error" />
+                <p class="mt-1.5 text-xs text-navy-500">Só para você identificar. Depois de criar, leia o QR Code para conectar o número.</p>
+            </div>
+        </EditForm>
+    </ChildContent>
+    <Footer>
+        <button class="btn-secondary" @onclick="() => _createOpen = false">Cancelar</button>
+        <button class="btn-primary" type="submit" form="create-instance" disabled="@_busy">
+            @if (_busy) { <Spinner Class="h-4 w-4 text-navy-950" /> } Criar instância
+        </button>
+    </Footer>
+</Modal>
+
+@code {
+    private List<InstanceDto>? _items;
+    private bool _createOpen, _busy;
+    private CreateInstanceRequest _new = new();
+    private string? _search;
+    private string _filter = "";
+    private Timer? _timer;
+
+    private IEnumerable<InstanceDto> Filtered => (_items ?? []).Where(Matches);
+
+    private bool Matches(InstanceDto i)
+    {
+        if (_filter != "" && (_filter == "on") != (i.Status == "WORKING")) return false;
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        var q = _search.Trim();
+        var digits = new string(q.Where(char.IsDigit).ToArray());
+        return i.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
+            || i.Id.ToString("N").Contains(q.Replace("-", ""), StringComparison.OrdinalIgnoreCase)
+            || (digits.Length > 0 && i.PhoneNumber?.Contains(digits) == true);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+        _timer = new Timer(_ => InvokeAsync(async () => { await Load(); StateHasChanged(); }), null, 15_000, 15_000);
+    }
+
+    private async Task Load()
+    {
+        try { _items = await Api.InstancesAsync(); }
+        catch (ApiException ex) { Toasts.Error(ex.Message); _items ??= []; }
+    }
+
+    private async Task Create()
+    {
+        _busy = true;
+        try
+        {
+            var created = await Api.CreateInstanceAsync(_new);
+            _createOpen = false;
+            _new = new();
+            Toasts.Success("Instância criada. Leia o QR Code para conectar.");
+            Nav.NavigateTo($"instances/{created.Id}?qr=1");
+        }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+        finally { _busy = false; }
+    }
+
+    private static string Abbr(string name) =>
+        string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpperInvariant(p[0])));
+
+    public static string FormatPhone(string p) =>
+        p.Length == 13 && p.StartsWith("55") ? $"+55 ({p[2..4]}) {p[4..9]}-{p[9..]}"
+        : p.Length == 12 && p.StartsWith("55") ? $"+55 ({p[2..4]}) {p[4..8]}-{p[8..]}"
+        : "+" + p;
+
+    public void Dispose() => _timer?.Dispose();
+}

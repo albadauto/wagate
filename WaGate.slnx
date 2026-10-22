@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WaGate.Api/WaGate.Api.csproj" />
+    <Project Path="src/WaGate.Domain/WaGate.Domain.csproj" />
+    <Project Path="src/WaGate.Infrastructure/WaGate.Infrastructure.csproj" />
+    <Project Path="src/WaGate.Shared/WaGate.Shared.csproj" />
+    <Project Path="src/WaGate.Web/WaGate.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WaGate.Tests/WaGate.Tests.csproj" />
+  </Folder>
+</Solution>

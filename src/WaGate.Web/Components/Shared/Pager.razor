@@ -1,0 +1,17 @@
+@if (TotalPages > 1)
+{
+    <div class="flex items-center justify-between border-t border-navy-100 px-4 py-3 text-sm text-navy-500">
+        <span>Página @Page de @TotalPages · @Total registros</span>
+        <div class="flex gap-2">
+            <button class="btn-secondary btn-sm" disabled="@(Page <= 1)" @onclick="() => PageChanged.InvokeAsync(Page - 1)">Anterior</button>
+            <button class="btn-secondary btn-sm" disabled="@(Page >= TotalPages)" @onclick="() => PageChanged.InvokeAsync(Page + 1)">Próxima</button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Page { get; set; }
+    [Parameter] public int TotalPages { get; set; }
+    [Parameter] public int Total { get; set; }
+    [Parameter] public EventCallback<int> PageChanged { get; set; }
+}

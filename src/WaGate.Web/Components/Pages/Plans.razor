@@ -1,0 +1,244 @@
+@page "/plans"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject ToastService Toasts
+@inject SubscriptionState Subscription
+@inject NavigationManager Nav
+
+<PageTitle>Planos · WaGate</PageTitle>
+
+<div class="mx-auto max-w-5xl">
+    <div class="text-center">
+        @if (Welcome == 1)
+        {
+            <div class="mx-auto mb-4 inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-800">
+                <Icon Name="check" Class="h-3.5 w-3.5" /> Conta criada! Agora escolha seu plano.
+            </div>
+        }
+        <h1 class="text-3xl font-bold tracking-tight text-navy-950 outline-none" tabindex="-1">Planos simples, por instância</h1>
+        <p class="mx-auto mt-2 max-w-xl text-navy-500">Cada instância é um número de WhatsApp conectado. Mensagens ilimitadas em todos os planos.</p>
+        @if (Canceled == 1)
+        {
+            <p class="mt-3 text-sm text-amber-700">Pagamento não concluído. Você pode tentar de novo quando quiser.</p>
+        }
+    </div>
+
+    @if (_plans is null || _sub is null)
+    {
+        <div class="flex justify-center py-20"><Spinner /></div>
+    }
+    else
+    {
+        @if (!_sub.BillingEnabled)
+        {
+            <div class="mx-auto mt-8 max-w-2xl rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                A cobrança não está configurada neste servidor (defina <code class="code">Stripe:SecretKey</code> na API). Enquanto isso, o limite de instâncias é o da conta.
+            </div>
+        }
+
+        <div class="mt-10 grid items-stretch gap-6 md:grid-cols-2">
+            @* ---------- Ultimate ---------- *@
+            <div class="card relative flex flex-col p-8">
+                @if (_ultimate.TrialDays > 0 && _sub.TrialAvailable)
+                {
+                    <span class="absolute right-6 top-6 rounded-full bg-brand-500 px-3 py-1 text-xs font-bold text-navy-950">@_ultimate.TrialDays dias grátis</span>
+                }
+                <div class="text-sm font-bold uppercase tracking-[0.2em] text-brand-700">Plano @_ultimate.Name</div>
+                <div class="mt-4 flex items-end gap-2">
+                    <span class="text-5xl font-extrabold tracking-tight text-navy-950">@Money.Brl(_ultimate.UnitAmount)</span>
+                    <span class="pb-1.5 text-sm text-navy-500">/mês por instância</span>
+                </div>
+                <p class="mt-4 text-navy-600">@_ultimate.Description</p>
+
+                <div class="mt-6 rounded-2xl border border-navy-100 bg-navy-50/60 p-5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-navy-600">Quantas instâncias?</span>
+                        <div class="flex items-center rounded-lg bg-white ring-1 ring-navy-200">
+                            <button class="px-3 py-1.5 text-lg leading-none text-navy-600 hover:text-navy-950 disabled:opacity-30" disabled="@(_uQty <= _ultimate.MinQuantity)" @onclick="() => _uQty--">−</button>
+                            <span class="w-10 text-center font-bold tabular-nums">@_uQty</span>
+                            <button class="px-3 py-1.5 text-lg leading-none text-navy-600 hover:text-navy-950 disabled:opacity-30" disabled="@(_uQty >= _ultimate.MaxQuantity)" @onclick="() => _uQty++">+</button>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-center justify-between border-t border-navy-100 pt-4">
+                        <span class="text-sm text-navy-500">Total mensal</span>
+                        <span class="text-xl font-bold text-navy-950">@Money.Brl(_ultimate.UnitAmount * _uQty)</span>
+                    </div>
+                    @if (_ultimate.TrialDays > 0 && _sub.TrialAvailable)
+                    {
+                        <p class="mt-2 text-xs text-navy-500">Nada é cobrado nos primeiros @_ultimate.TrialDays dias. Cancele quando quiser.</p>
+                    }
+                    @if (_uQty >= _ultimate.MaxQuantity)
+                    {
+                        <p class="mt-2 text-xs text-brand-800">Precisa de @_partner.MinQuantity ou mais? O Partner sai mais barato por instância.</p>
+                    }
+                </div>
+
+                <ul class="mt-6 flex-1 space-y-3">
+                    @foreach (var f in _ultimate.Features)
+                    {
+                        <li class="flex items-start gap-3 text-navy-800"><Icon Name="check" Class="mt-0.5 h-5 w-5 shrink-0 text-brand-600" /> @f</li>
+                    }
+                </ul>
+
+                <button class="btn-primary mt-8 w-full rounded-full py-3.5 text-base" disabled="@(_busy || IsCurrent("Ultimate", _uQty))" @onclick='() => Choose("Ultimate", _uQty)'>
+                    @if (_busy && _choosing == "Ultimate") { <Spinner Class="h-4 w-4 text-navy-950" /> }
+                    @CtaLabel("Ultimate", _uQty)
+                </button>
+            </div>
+
+            @* ---------- Partner (visual escuro) ---------- *@
+            <div class="relative flex flex-col overflow-hidden rounded-2xl bg-navy-950 p-8 text-white shadow-xl ring-1 ring-white/10">
+                <div class="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-brand-500/15 blur-3xl"></div>
+                <div class="relative text-sm font-bold uppercase tracking-[0.2em] text-brand-400">Plano @_partner.Name</div>
+                <div class="relative mt-4 flex items-end gap-2">
+                    <span class="text-5xl font-extrabold tracking-tight">@Money.Brl(_partner.UnitAmount)</span>
+                    <span class="pb-1.5 text-sm text-navy-300">/mês por instância</span>
+                </div>
+                <p class="relative mt-4 text-navy-200">@_partner.Description</p>
+
+                <div class="relative mt-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="text-sm text-navy-200">Quantas instâncias você vai operar?</span>
+                        <span class="whitespace-nowrap"><span class="text-xl font-bold tabular-nums">@_pQty.ToString("N0", Br)</span> <span class="text-sm text-navy-300">instâncias</span></span>
+                    </div>
+
+                    <input type="range" min="0" max="1000" step="1" class="partner-range mt-6 w-full"
+                           value="@ToSlider(_pQty)" @oninput="e => _pQty = FromSlider(int.Parse(e.Value!.ToString()!))" />
+                    <div class="relative mt-2 h-5 text-[11px] text-navy-400">
+                        @foreach (var m in Marks)
+                        {
+                            <button class="absolute @(m == Marks[0] ? "" : m == Marks[^1] ? "-translate-x-full" : "-translate-x-1/2") rounded px-1 tabular-nums hover:bg-white/10 hover:text-white @(m == _pQty ? "text-brand-400" : "")"
+                                    style="left:@((ToSlider(m) / 10.0).ToString(System.Globalization.CultureInfo.InvariantCulture))%" @onclick="() => _pQty = m">@m.ToString("N0", Br)</button>
+                        }
+                    </div>
+
+                    <div class="mt-5 flex items-center justify-between border-t border-white/10 pt-4">
+                        <span class="text-sm text-navy-300">Total mensal estimado</span>
+                        <span class="text-xl font-bold text-brand-400">@Money.Brl(_partner.UnitAmount * _pQty)</span>
+                    </div>
+                </div>
+
+                <ul class="relative mt-6 flex-1 space-y-3">
+                    @foreach (var f in _partner.Features)
+                    {
+                        <li class="flex items-start gap-3"><Icon Name="check" Class="mt-0.5 h-5 w-5 shrink-0 text-brand-400" /> @f</li>
+                    }
+                </ul>
+
+                <button class="relative mt-8 w-full rounded-full border border-white/25 py-3.5 text-base font-semibold transition hover:border-brand-400 hover:bg-brand-500 hover:text-navy-950 disabled:opacity-50"
+                        disabled="@(_busy || IsCurrent("Partner", _pQty))" @onclick='() => Choose("Partner", _pQty)'>
+                    @CtaLabel("Partner", _pQty)
+                </button>
+            </div>
+        </div>
+
+        <p class="mt-8 text-center text-xs text-navy-400">Pagamento seguro pelo Stripe. Valores em reais, cobrados mensalmente. Troque de plano ou quantidade a qualquer momento com cobrança proporcional.</p>
+    }
+</div>
+
+<Modal Open="_confirm is not null" OpenChanged="_ => _confirm = null" Title="Alterar plano?">
+    <ChildContent>
+        @if (_confirm is not null)
+        {
+            <p class="text-sm text-navy-600">
+                Sua assinatura passa para <b>@_confirm.Value.Plan</b> com <b>@_confirm.Value.Qty instância(s)</b>. A diferença é cobrada (ou creditada) proporcionalmente na próxima fatura.
+                @if (_sub?.Status == "trialing" && _confirm.Value.Plan == "Partner")
+                {
+                    <span class="mt-2 block text-amber-700">O período grátis vale só para o Ultimate: ao mudar para o Partner, a cobrança começa hoje.</span>
+                }
+            </p>
+        }
+    </ChildContent>
+    <Footer>
+        <button class="btn-secondary" @onclick="() => _confirm = null">Cancelar</button>
+        <button class="btn-primary" disabled="@_busy" @onclick="ConfirmChange">Confirmar</button>
+    </Footer>
+</Modal>
+
+@code {
+    [SupplyParameterFromQuery] public int? Welcome { get; set; }
+    [SupplyParameterFromQuery] public int? Canceled { get; set; }
+
+    private static readonly System.Globalization.CultureInfo Br = new("pt-BR");
+    private static readonly int[] Marks = [10, 50, 100, 200, 500, 1000, 2000];
+
+    private List<PlanDto>? _plans;
+    private SubscriptionDto? _sub;
+    private PlanDto _ultimate = default!, _partner = default!;
+    private int _uQty = 1, _pQty = 10;
+    private bool _busy;
+    private string? _choosing;
+    private (string Plan, int Qty)? _confirm;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _plans = await Api.PlansAsync();
+            _ultimate = _plans.First(p => p.Key == "Ultimate");
+            _partner = _plans.First(p => p.Key == "Partner");
+            _pQty = _partner.MinQuantity;
+            _sub = await Subscription.LoadAsync(force: true);
+            if (_sub is { IsUsable: true })
+            {
+                if (_sub.Plan == "Ultimate") _uQty = Math.Clamp(_sub.Quantity, _ultimate.MinQuantity, _ultimate.MaxQuantity);
+                if (_sub.Plan == "Partner") _pQty = Math.Clamp(_sub.Quantity, _partner.MinQuantity, _partner.MaxQuantity);
+            }
+        }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+    }
+
+    // escala logarítmica: 10 → 0, 2000 → 1000 (igual às marcações 10, 50, 100, 200, 500, 1.000, 2.000)
+    private int ToSlider(int q)
+    {
+        var min = _partner?.MinQuantity ?? 10; var max = _partner?.MaxQuantity ?? 2000;
+        return (int)Math.Round(Math.Log((double)Math.Clamp(q, min, max) / min) / Math.Log((double)max / min) * 1000);
+    }
+
+    private int FromSlider(int t)
+    {
+        var min = _partner.MinQuantity; var max = _partner.MaxQuantity;
+        var raw = min * Math.Pow((double)max / min, t / 1000.0);
+        var step = raw < 100 ? 1 : raw < 500 ? 5 : 10;
+        var q = (int)(Math.Round(raw / step) * step);
+        foreach (var m in Marks) if (Math.Abs(q - m) <= step * 2) q = m; // "gruda" nas marcações
+        return Math.Clamp(q, min, max);
+    }
+
+    private bool IsCurrent(string plan, int qty) => _sub is { IsUsable: true } && _sub.Plan == plan && _sub.Quantity == qty;
+
+    private string CtaLabel(string plan, int qty)
+    {
+        if (_sub is { IsUsable: true })
+            return IsCurrent(plan, qty) ? "Seu plano atual" : _sub.Plan == plan ? "Atualizar quantidade" : $"Mudar para o {plan}";
+        if (plan == "Ultimate" && _sub?.TrialAvailable == true && _ultimate.TrialDays > 0) return $"Começar {_ultimate.TrialDays} dias grátis";
+        return $"Assinar o {plan}";
+    }
+
+    private async Task Choose(string plan, int qty)
+    {
+        if (_sub is { IsUsable: true }) { _confirm = (plan, qty); return; }
+        _busy = true; _choosing = plan;
+        try
+        {
+            var r = await Api.CheckoutAsync(plan, qty);
+            Nav.NavigateTo(r.Url, forceLoad: true);
+        }
+        catch (ApiException ex) { Toasts.Error(ex.Message); _busy = false; _choosing = null; }
+    }
+
+    private async Task ConfirmChange()
+    {
+        if (_confirm is null) return;
+        _busy = true;
+        try
+        {
+            _sub = await Api.ChangePlanAsync(_confirm.Value.Plan, _confirm.Value.Qty);
+            Subscription.Set(_sub);
+            Toasts.Success("Plano atualizado.");
+            _confirm = null;
+        }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+        finally { _busy = false; }
+    }
+}

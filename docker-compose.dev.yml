@@ -1,0 +1,35 @@
+# Só a infraestrutura (SQL Server + WAHA). Rode API e Web com `dotnet run` na sua máquina.
+# docker compose -f docker-compose.dev.yml up -d
+name: wagate-dev
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: WaGate@2026!
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqldata-dev:/var/opt/mssql
+
+  waha:
+    image: devlikeapro/waha:latest
+    environment:
+      WAHA_API_KEY: wagate-waha-key
+      WHATSAPP_DEFAULT_ENGINE: GOWS
+      WAHA_DASHBOARD_USERNAME: wagate
+      WAHA_DASHBOARD_PASSWORD: WaGate-Dev-2026
+      WAHA_BASE_URL: http://localhost:3000
+    ports:
+      - "3000:3000"
+    # permite que o WAHA (no container) chame a API rodando no host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - waha-dev:/app/.sessions
+
+volumes:
+  sqldata-dev:
+  waha-dev:

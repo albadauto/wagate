@@ -1,0 +1,11 @@
+<span class="inline-flex items-center gap-1.5 @(On ? "text-navy-700" : "text-navy-400")">
+    <span class="grid h-4 w-4 place-items-center rounded-full @(On ? "bg-brand-500 text-navy-950" : "bg-navy-200 text-navy-400")">
+        <Icon Name="@(On ? "check" : "x")" Class="h-2.5 w-2.5" />
+    </span>
+    @Label
+</span>
+
+@code {
+    [Parameter] public bool On { get; set; }
+    [Parameter] public string Label { get; set; } = "";
+}

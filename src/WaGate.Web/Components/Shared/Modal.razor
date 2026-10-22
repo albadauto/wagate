@@ -1,0 +1,27 @@
+@if (Open)
+{
+    <div class="fixed inset-0 z-40 flex items-end justify-center bg-navy-950/40 p-4 backdrop-blur-[2px] sm:items-center" @onclick="Close">
+        <div class="w-full @Width max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-xl ring-1 ring-navy-900/5" @onclick:stopPropagation="true">
+            <div class="flex items-center justify-between border-b border-navy-100 px-5 py-4">
+                <h2 class="text-base font-semibold">@Title</h2>
+                <button type="button" class="rounded-md p-1 text-navy-400 hover:bg-navy-100 hover:text-navy-700" @onclick="Close"><Icon Name="x" /></button>
+            </div>
+            <div class="px-5 py-5">@ChildContent</div>
+            @if (Footer is not null)
+            {
+                <div class="flex justify-end gap-2 border-t border-navy-100 bg-navy-50/60 px-5 py-3">@Footer</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Width { get; set; } = "max-w-lg";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Footer { get; set; }
+
+    private Task Close() => OpenChanged.InvokeAsync(false);
+}

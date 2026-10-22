@@ -1,0 +1,91 @@
+name: wagate
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-WaGate@2026!}
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqldata:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  waha:
+    image: devlikeapro/waha:latest
+    environment:
+      WAHA_API_KEY: ${WAHA_API_KEY:-wagate-waha-key}
+      WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-GOWS}
+      WAHA_DASHBOARD_USERNAME: ${WAHA_DASHBOARD_USERNAME:-wagate}
+      WAHA_DASHBOARD_PASSWORD: ${WAHA_DASHBOARD_PASSWORD:-WaGate-Dash-2026}
+      WHATSAPP_SWAGGER_USERNAME: ${WAHA_DASHBOARD_USERNAME:-wagate}
+      WHATSAPP_SWAGGER_PASSWORD: ${WAHA_DASHBOARD_PASSWORD:-WaGate-Dash-2026}
+      WAHA_BASE_URL: http://localhost:3000
+      WHATSAPP_FILES_LIFETIME: "0"
+      WAHA_LOG_LEVEL: info
+      WAHA_CLIENT_DEVICE_NAME: WaGate
+    ports:
+      - "3000:3000"
+    volumes:
+      - waha_sessions:/app/.sessions
+      - waha_media:/app/.media
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: src/WaGate.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: Server=sqlserver,1433;Database=WaGate;User Id=sa;Password=${MSSQL_SA_PASSWORD:-WaGate@2026!};TrustServerCertificate=True
+      Jwt__Key: ${JWT_KEY:-troque-por-uma-chave-aleatoria-de-pelo-menos-64-caracteres-0000000000000}
+      Waha__BaseUrl: http://waha:3000
+      Waha__ApiKey: ${WAHA_API_KEY:-wagate-waha-key}
+      Waha__WebhookUrl: http://api:8080/waha/webhook
+      Waha__WebhookHmacKey: ${WAHA_HMAC_KEY:-wagate-hmac-key}
+      Security__AllowRegistration: ${ALLOW_REGISTRATION:-true}
+      Seed__AdminEmail: ${ADMIN_EMAIL:-admin@wagate.local}
+      Seed__AdminPassword: ${ADMIN_PASSWORD:-Admin@123456}
+      Cors__Origins__0: http://localhost:5090
+      Stripe__SecretKey: ${STRIPE_SECRET_KEY:-}
+      Stripe__WebhookSecret: ${STRIPE_WEBHOOK_SECRET:-}
+      Billing__PublicAppUrl: ${PUBLIC_APP_URL:-http://localhost:5090}
+    ports:
+      - "5080:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      waha:
+        condition: service_started
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: src/WaGate.Web/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Api__BaseUrl: http://api:8080
+      Api__PublicUrl: ${PUBLIC_API_URL:-http://localhost:5080}
+      DataProtection__KeysPath: /keys
+    ports:
+      - "5090:8080"
+    volumes:
+      - web_keys:/keys
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  sqldata:
+  waha_sessions:
+  waha_media:
+  web_keys:

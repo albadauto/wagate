@@ -1,0 +1,39 @@
+@inject IJSRuntime JS
+
+<div class="min-w-0 @Class">
+    @if (!string.IsNullOrEmpty(Label))
+    {
+        <label class="mb-1 block text-xs font-medium text-navy-500">@Label</label>
+    }
+    <div class="flex items-stretch overflow-hidden rounded-lg border border-navy-200 bg-navy-50">
+        <code class="min-w-0 flex-1 truncate px-3 py-2 font-mono text-[13px] text-navy-800">@(Masked && !_revealed ? new string('•', Math.Min(Value.Length, 28)) : Value)</code>
+        @if (Masked)
+        {
+            <button type="button" title="Mostrar" class="border-l border-navy-200 px-2.5 text-navy-500 hover:bg-white hover:text-navy-800" @onclick="() => _revealed = !_revealed">
+                <Icon Name="eye" />
+            </button>
+        }
+        <button type="button" title="Copiar" class="border-l border-navy-200 px-2.5 text-navy-500 hover:bg-white hover:text-brand-700" @onclick="Copy">
+            <Icon Name="@(_copied ? "check" : "copy")" />
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? Label { get; set; }
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+    [Parameter] public bool Masked { get; set; }
+    [Parameter] public string Class { get; set; } = "";
+
+    private bool _revealed;
+    private bool _copied;
+
+    private async Task Copy()
+    {
+        await JS.InvokeVoidAsync("wagate.copy", Value);
+        _copied = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _copied = false;
+    }
+}

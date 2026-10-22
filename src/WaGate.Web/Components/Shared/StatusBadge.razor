@@ -1,0 +1,34 @@
+<span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset @Style">
+    <span class="h-1.5 w-1.5 rounded-full @Dot @(Pulse ? "animate-pulse" : "")"></span>
+    @Label
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Status { get; set; } = "";
+
+    private (string style, string dot, string label, bool pulse) Info => Status.ToUpperInvariant() switch
+    {
+        "WORKING" => ("bg-brand-50 text-brand-700 ring-brand-600/20", "bg-brand-500", "Conectado", false),
+        "SCAN_QR_CODE" => ("bg-amber-50 text-amber-800 ring-amber-600/20", "bg-amber-500", "Aguardando QR", true),
+        "STARTING" => ("bg-sky-50 text-sky-700 ring-sky-600/20", "bg-sky-500", "Iniciando", true),
+        "STOPPED" => ("bg-navy-100 text-navy-600 ring-navy-500/20", "bg-navy-400", "Parado", false),
+        "CREATED" => ("bg-navy-100 text-navy-600 ring-navy-500/20", "bg-navy-400", "Criado", false),
+        "FAILED" => ("bg-red-50 text-red-700 ring-red-600/20", "bg-red-500", "Falhou", false),
+        // entregas
+        "SUCCEEDED" => ("bg-brand-50 text-brand-700 ring-brand-600/20", "bg-brand-500", "Entregue", false),
+        "PENDING" => ("bg-sky-50 text-sky-700 ring-sky-600/20", "bg-sky-500", "Pendente", true),
+        "DEAD" => ("bg-red-50 text-red-700 ring-red-600/20", "bg-red-500", "Descartada", false),
+        // mensagens
+        "SENT" => ("bg-navy-100 text-navy-700 ring-navy-500/20", "bg-navy-500", "Enviada", false),
+        "DELIVERED" => ("bg-sky-50 text-sky-700 ring-sky-600/20", "bg-sky-500", "Entregue", false),
+        "READ" => ("bg-brand-50 text-brand-700 ring-brand-600/20", "bg-brand-500", "Lida", false),
+        "PLAYED" => ("bg-brand-50 text-brand-700 ring-brand-600/20", "bg-brand-500", "Reproduzida", false),
+        "RECEIVED" => ("bg-violet-50 text-violet-700 ring-violet-600/20", "bg-violet-500", "Recebida", false),
+        _ => ("bg-navy-100 text-navy-600 ring-navy-500/20", "bg-navy-400", Status, false)
+    };
+
+    private string Style => Info.style;
+    private string Dot => Info.dot;
+    private string Label => Info.label;
+    private bool Pulse => Info.pulse;
+}

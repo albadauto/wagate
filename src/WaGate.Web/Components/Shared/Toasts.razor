@@ -1,0 +1,26 @@
+@implements IDisposable
+@inject ToastService ToastSvc
+
+<div class="pointer-events-none fixed bottom-4 right-4 z-50 flex w-full max-w-sm flex-col gap-2">
+    @foreach (var t in ToastSvc.Items)
+    {
+        <div class="pointer-events-auto flex items-start gap-3 rounded-xl px-4 py-3 text-sm shadow-lg ring-1 @Style(t.Kind)">
+            <Icon Name="@(t.Kind == ToastKind.Error ? "alert" : "check")" Class="mt-0.5 h-4 w-4 shrink-0" />
+            <p class="flex-1">@t.Message</p>
+            <button class="opacity-60 hover:opacity-100" @onclick="() => ToastSvc.Dismiss(t.Id)"><Icon Name="x" /></button>
+        </div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized() => ToastSvc.Changed += OnChanged;
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => ToastSvc.Changed -= OnChanged;
+
+    private static string Style(ToastKind k) => k switch
+    {
+        ToastKind.Error => "bg-red-600 text-white ring-red-700",
+        ToastKind.Success => "bg-navy-950 text-white ring-navy-800",
+        _ => "bg-white text-navy-800 ring-navy-200"
+    };
+}

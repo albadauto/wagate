@@ -1,0 +1,20 @@
+<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+        @if (Back is not null)
+        {
+            <a href="@Back" class="mb-2 inline-flex items-center gap-1 text-sm text-navy-500 hover:text-navy-800"><Icon Name="arrow-left" /> Voltar</a>
+        }
+        <h1 class="text-2xl font-semibold tracking-tight outline-none" tabindex="-1">@Title</h1>
+        @if (!string.IsNullOrEmpty(Subtitle)) { <p class="mt-1 text-sm text-navy-500">@Subtitle</p> }
+        @if (HeaderInfo is not null) { <div class="mt-2">@HeaderInfo</div> }
+    </div>
+    @if (Actions is not null) { <div class="flex flex-wrap gap-2">@Actions</div> }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string? Back { get; set; }
+    [Parameter] public RenderFragment? HeaderInfo { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+}

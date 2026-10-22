@@ -1,0 +1,30 @@
+@inject NavigationManager Nav
+@implements IDisposable
+
+<a href="@Href" class="flex items-center gap-3 rounded-lg px-3 py-2.5 font-medium transition-colors @(IsActive ? "bg-brand-50 text-brand-700" : "text-navy-600 hover:bg-navy-100 hover:text-navy-950")">
+    <Icon Name="@Icon" Class="@(IsActive ? "h-4 w-4 text-brand-600" : "h-4 w-4 text-navy-400")" />
+    @ChildContent
+</a>
+
+@code {
+    [Parameter] public string Href { get; set; } = "";
+    [Parameter] public string Icon { get; set; } = "";
+    [Parameter] public NavLinkMatch Match { get; set; } = NavLinkMatch.Prefix;
+    /// <summary>Prefixo adicional que também ativa o item (ex.: "instances").</summary>
+    [Parameter] public string? Also { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool IsActive
+    {
+        get
+        {
+            var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0];
+            if (Also is not null && path.StartsWith(Also)) return true;
+            return Match == NavLinkMatch.All ? path == Href : path.StartsWith(Href);
+        }
+    }
+
+    protected override void OnInitialized() => Nav.LocationChanged += OnLocation;
+    private void OnLocation(object? s, LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+    public void Dispose() => Nav.LocationChanged -= OnLocation;
+}

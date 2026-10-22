@@ -1,0 +1,94 @@
+@inject ApiClient Api
+@inject ToastService Toasts
+
+<div class="card overflow-hidden">
+    <div class="flex flex-col gap-3 border-b border-navy-100 p-4 sm:flex-row sm:items-center">
+        <div class="flex rounded-lg bg-navy-100 p-0.5 text-sm">
+            @foreach (var (v, l) in Filters)
+            {
+                <button class="rounded-md px-3 py-1.5 font-medium @(_direction == v ? "bg-white shadow-sm" : "text-navy-500")" @onclick="() => SetDirection(v)">@l</button>
+            }
+        </div>
+        <input class="input sm:max-w-xs" placeholder="Buscar no texto..." @bind="_search" @bind:after="Reload" />
+        <button class="btn-secondary sm:ml-auto" @onclick="Load"><Icon Name="refresh" /> Atualizar</button>
+    </div>
+
+    @if (_page is null)
+    {
+        <div class="flex justify-center py-16"><Spinner /></div>
+    }
+    else if (_page.Items.Count == 0)
+    {
+        <div class="py-16 text-center text-sm text-navy-500">Nenhuma mensagem encontrada.</div>
+    }
+    else
+    {
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-navy-50 text-left text-xs uppercase tracking-wide text-navy-500">
+                    <tr>
+                        <th class="px-4 py-2.5 font-medium"></th>
+                        <th class="px-4 py-2.5 font-medium">Contato</th>
+                        <th class="px-4 py-2.5 font-medium">Conteúdo</th>
+                        <th class="px-4 py-2.5 font-medium">Status</th>
+                        <th class="px-4 py-2.5 font-medium">Data</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-navy-100">
+                    @foreach (var m in _page.Items)
+                    {
+                        <tr class="hover:bg-navy-50/60">
+                            <td class="px-4 py-3">
+                                @if (m.Direction == "Inbound")
+                                {
+                                    <span title="Recebida" class="grid h-7 w-7 place-items-center rounded-full bg-violet-50 text-violet-600"><Icon Name="arrow-in" Class="h-3.5 w-3.5" /></span>
+                                }
+                                else
+                                {
+                                    <span title="Enviada" class="grid h-7 w-7 place-items-center rounded-full bg-brand-50 text-brand-600"><Icon Name="arrow-out" Class="h-3.5 w-3.5" /></span>
+                                }
+                            </td>
+                            <td class="px-4 py-3">
+                                <div class="font-medium">@(m.SenderName ?? (m.Phone is null ? m.ChatId : "+" + m.Phone))</div>
+                                @if (m.IsGroup) { <div class="text-xs text-navy-400">grupo · @m.ChatId</div> }
+                            </td>
+                            <td class="max-w-md px-4 py-3">
+                                <div class="flex items-center gap-2">
+                                    @if (m.Type != "Text") { <span class="rounded bg-navy-100 px-1.5 py-0.5 text-[11px] font-medium text-navy-600">@m.Type</span> }
+                                    <span class="truncate text-navy-700">@(m.Body ?? m.FileName ?? "—")</span>
+                                </div>
+                                @if (m.Error is not null) { <div class="mt-1 truncate text-xs text-red-600">@m.Error</div> }
+                            </td>
+                            <td class="px-4 py-3"><StatusBadge Status="@(m.Status.ToUpperInvariant())" /></td>
+                            <td class="whitespace-nowrap px-4 py-3 text-navy-500">@m.CreatedAt.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <Pager Page="_page.Page" TotalPages="_page.TotalPages" Total="_page.Total" PageChanged="Go" />
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid InstanceId { get; set; }
+
+    private static readonly (string?, string)[] Filters = [(null, "Todas"), ("Inbound", "Recebidas"), ("Outbound", "Enviadas")];
+
+    private PagedResult<MessageDto>? _page;
+    private int _current = 1;
+    private string? _direction;
+    private string? _search;
+
+    protected override Task OnInitializedAsync() => Load();
+
+    private async Task Load()
+    {
+        try { _page = await Api.MessagesAsync(InstanceId, _current, _direction, _search); }
+        catch (ApiException ex) { Toasts.Error(ex.Message); }
+    }
+
+    private Task SetDirection(string? d) { _direction = d; return Reload(); }
+    private Task Reload() { _current = 1; return Load(); }
+    private Task Go(int p) { _current = p; return Load(); }
+}
